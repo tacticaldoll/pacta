@@ -1,10 +1,17 @@
 [workspace]
 resolver = "2"
-members = []
+members = [
+    "crates/pacta-contract",
+    "crates/pacta-governance"
+]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
+publish = false
 
 [workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+tianheng = "0.1.6"
