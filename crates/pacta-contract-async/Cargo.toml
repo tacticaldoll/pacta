@@ -1,6 +1,8 @@
 [package]
 name = "pacta-contract-async"
-version.workspace = true
+# Own version line (not the workspace lockstep): the async surface evolves independently so the
+# frozen, published sync contract (pacta-contract) is never dragged into a cosmetic bump.
+version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -9,7 +11,9 @@ readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 description = "Async binding of the Pacta Registry contract, composing over the shared lifecycle kernel."
-publish.workspace = true
+# Unpublished while the async surface evolves; flips to true when worklane's review (and the async
+# conformance runner) prove it stable enough to bind to crates.io semver.
+publish = false
 
 [dependencies]
 pacta-contract.workspace = true
