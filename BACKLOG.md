@@ -89,6 +89,21 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
 - Durable `Registry` backends such as SQLite or Postgres, living outside the
   workspace and proving themselves against `pacta-conformance`.
 - An async `Registry` variant, once an async backend forces it.
+  - **Forced now (2026-07, dogfood finding from worklane).** worklane — a real
+    durable, multi-backend (SQLite/Postgres/Redis), concurrent, shipping queue —
+    adopted the `Registry` shape and immediately hit the wall: its backends do
+    async I/O (tokio-postgres, redis async), so they cannot implement the
+    synchronous `Registry` (`fn claim(&self, …) -> Result<…>`). `block_on` inside
+    the runtime is a non-starter. The sync `Registry` fits only sync/in-memory
+    backends; a durable async backend needs an async variant. worklane is the
+    forcing consumer this item anticipated.
+  - **Proven async shape (from worklane's mirror-port):** the same method set and
+    semantics, made async — `async fn claim(&self, dockets, now) -> Option<Claim>`,
+    `heartbeat`, `fulfill`, `breach`, `release(retainer, reclaimable_at)` — with
+    the retainer-rotation fencing and consumer-injected `reclaimable_at` unchanged.
+    worklane will keep this shape in its own async port; when pacta ships an async
+    `Registry` matching it, worklane can depend on pacta's trait directly, closing
+    the loop.
 
 Surface: lifecycle persistence.
 
