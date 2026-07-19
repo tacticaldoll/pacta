@@ -4,6 +4,38 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-17
+
+Unifies the synchronous and asynchronous `Registry` bindings onto a single transition
+port and ships the async binding as a feature of `pacta-contract`. **Breaking** at the
+implementer surface (the trait's required-method set changed); callers of the five
+lifecycle ops are unaffected.
+
+### Changed
+
+- **BREAKING: `Registry` and `AsyncRegistry` unify on one transition port.** A backend
+  now implements `claim` (native selection) + `apply(retainer, transition)` +
+  `lease_millis`; `heartbeat`, `fulfill`, `breach`, and `release` are provided as default
+  methods over `apply`. `apply` runs a pure `lifecycle` decision within the backend's own
+  atomic scope, so the backend owns *how* it is atomic and the kernel owns *what* the
+  transition decides. Callers are unaffected — the five ops remain callable — but any
+  external `impl Registry` must move from the five methods to `claim`/`apply`/`lease_millis`.
+- **The async binding ships behind `pacta-contract`'s `async` feature**, not as separate
+  crates. `AsyncRegistry` uses native `async fn` in traits (no `async-trait` dependency)
+  and is `Send`-agnostic at its futures — async/executor coloring is the consumer's. The
+  former `pacta-contract-async` and `pacta-memory-async` crates are removed (they were
+  never published).
+
+### Added
+
+- **`async` feature** on `pacta-contract` (`AsyncRegistry`, the shared `Transition` type,
+  and the optional `apply_via_cas` compare-and-set helper) and on `pacta-memory`
+  (`MemoryRegistryAsync`, the reference async backend, over the same store as the sync one).
+- **Async conformance**: `pacta-conformance`'s `async` feature adds `run_async` (async ⇄ sync
+  parity against the shared scenario set) and `run_async_contention` (the at-most-once
+  invariant under real multi-threaded contention, driven with no async runtime), so every
+  async backend proves the same contract.
+
 ## [0.1.2] - 2026-07-14
 
 Adds the deferred-reclaim primitive that durable retry composes from. No breaking
@@ -101,5 +133,7 @@ First public release: the thin lifecycle foundation, not a complete durable runt
 - No ingress API (`Signal -> Pact` is user-provided, not a shipped surface).
 - No framework adapters (Tower, HTTP) and no retry/backoff/timeout orchestration.
 
+[0.2.0]: https://github.com/tacticaldoll/pacta/releases/tag/v0.2.0
+[0.1.2]: https://github.com/tacticaldoll/pacta/releases/tag/v0.1.2
 [0.1.1]: https://github.com/tacticaldoll/pacta/releases/tag/v0.1.1
 [0.1.0]: https://github.com/tacticaldoll/pacta/releases/tag/v0.1.0
