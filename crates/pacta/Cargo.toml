@@ -15,6 +15,3 @@ publish.workspace = true
 pacta-contract.workspace = true
 pacta-executor.workspace = true
 pacta-driver.workspace = true
-
-[dev-dependencies]
-uuid.workspace = true
