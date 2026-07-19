@@ -12,5 +12,5 @@ Pacta SHALL include active prose drift in its executable governance reaction.
 - **THEN** the governance output identifies the relative file path, line number, phrase, and reason
 
 #### Scenario: Historical prose is not governed
-- **WHEN** git history or superseded ADRs contain historical architecture vocabulary
+- **WHEN** git history contains historical architecture vocabulary
 - **THEN** active prose governance does not fail on that historical text, because it scans only the active-prose file list

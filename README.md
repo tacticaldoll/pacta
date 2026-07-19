@@ -20,6 +20,7 @@ Pacta ships the lifecycle from `Pact` onward, not an ingress API.
 
 0.1.0 is the thin lifecycle foundation, not a complete durable runtime. It ships:
 
+- a curated **facade** (`pacta`) — the recommended single entrypoint you depend on;
 - the lifecycle **contract** (`Registry`) and a sans-I/O lifecycle **kernel**;
 - **lease/lapse** semantics with injected time (the core reads no ambient clock);
 - execution **composition** vocabulary (`Executor`, `Middleware`, `Policy`);

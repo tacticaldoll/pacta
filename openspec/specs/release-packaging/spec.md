@@ -1,17 +1,18 @@
 # release-packaging Specification
 
 ## Purpose
-TBD - created by archiving change prepare-release-hygiene. Update Purpose after archive.
+Define Pacta's crates.io release hygiene: the publishable crate set (with the governance gate unpublished), a version-carrying inter-member dependency graph, required crate metadata, a declared and CI-verified MSRV, an honest changelog, and a release scope the README states without overstating ingress or durability.
 ## Requirements
 ### Requirement: Publishable Crate Set
 Pacta SHALL declare an explicit publishable crate set for crates.io. The crates
-`pacta-contract`, `pacta-executor`, `pacta-driver`, `pacta-memory`, and
-`pacta-conformance` SHALL be publishable, and `pacta-governance` SHALL remain
+`pacta`, `pacta-contract`, `pacta-executor`, `pacta-driver`, `pacta-memory`, and
+`pacta-conformance` SHALL be publishable — including the curated `pacta` facade,
+which is the recommended entrypoint — and `pacta-governance` SHALL remain
 unpublished because it is an internal governance gate that depends on `tianheng`.
 
-#### Scenario: Core, backend, and conformance crates are publishable
+#### Scenario: Core, backend, conformance, and facade crates are publishable
 - **WHEN** the workspace manifests are read
-- **THEN** `pacta-contract`, `pacta-executor`, `pacta-driver`, `pacta-memory`, and `pacta-conformance` each resolve to `publish = true`
+- **THEN** `pacta`, `pacta-contract`, `pacta-executor`, `pacta-driver`, `pacta-memory`, and `pacta-conformance` each resolve to `publish = true`
 
 #### Scenario: The governance gate is not published
 - **WHEN** the workspace manifests are read
@@ -69,7 +70,7 @@ that are not part of the release.
 
 #### Scenario: README states the release scope
 - **WHEN** the README is read
-- **THEN** it states that the release ships the lifecycle contract, the sans-I/O kernel, the in-memory reference backend, the conformance suite, and executable governance, and that durable backends live outside the workspace and prove themselves against the conformance suite
+- **THEN** it states that the release ships the curated `pacta` facade entrypoint, the lifecycle contract, the sans-I/O kernel, the in-memory reference backend, the conformance suite, and executable governance, and that durable backends live outside the workspace and prove themselves against the conformance suite
 
 #### Scenario: Ingress is not overstated
 - **WHEN** the README depicts the lifecycle flow

@@ -1,7 +1,7 @@
 # registry-conformance Specification
 
 ## Purpose
-TBD - created by archiving change establish-memory-registry. Update Purpose after archive.
+Define Pacta's backend-agnostic conformance suite that verifies any `Registry` backend against the same lease lifecycle — claim, settlement, lapse, and heartbeat, including the at-least-once safety property — through the public trait with injected time and a single seeding hook.
 ## Requirements
 ### Requirement: Backend-Agnostic Conformance Suite
 Pacta SHALL provide a conformance suite that verifies `Registry` lifecycle

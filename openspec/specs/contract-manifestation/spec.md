@@ -1,7 +1,7 @@
 # contract-manifestation Specification
 
 ## Purpose
-TBD - created by archiving change manifest-the-contract. Update Purpose after archive.
+Project Pacta's lifecycle contract onto the `pacta` facade's published documentation — both the implementer half and the user-obligation half — name the reference implementations as reference, and anchor the public composition contract in a compiler-checked facade doctest.
 ## Requirements
 ### Requirement: Contract Is Manifest On The Consumer Surface
 Pacta SHALL project its lifecycle contract onto the consumer-facing documentation of

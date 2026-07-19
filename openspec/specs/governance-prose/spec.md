@@ -49,5 +49,5 @@ Pacta SHALL run an executable reaction that rejects high-risk stale architecture
 - **THEN** the governance command fails with a report identifying the file and phrase
 
 #### Scenario: Governance ignores historical prose
-- **WHEN** git history or superseded ADRs contain older vocabulary
+- **WHEN** git history contains older vocabulary
 - **THEN** the prose governance reaction does not fail because of that historical text, because it scans only the active-prose file list
