@@ -14,7 +14,7 @@
 use std::convert::Infallible;
 use std::sync::Mutex;
 
-use pacta_contract::{Claim, Pact, Registry, Retainer};
+use pacta_contract::{Claim, Pact, Registry, Retainer, Timestamp};
 use pacta_driver::{Driver, Step};
 use pacta_executor::{Execution, Executor, Middleware, Outcome};
 use uuid::Uuid;
@@ -29,7 +29,7 @@ struct Ledger {
 impl Registry for Ledger {
     type Error = Infallible;
 
-    fn claim(&self, _dockets: &[&str]) -> Result<Option<Claim>, Self::Error> {
+    fn claim(&self, _dockets: &[&str], _now: Timestamp) -> Result<Option<Claim>, Self::Error> {
         Ok(self
             .pending
             .lock()
@@ -37,7 +37,7 @@ impl Registry for Ledger {
             .take())
     }
 
-    fn heartbeat(&self, _retainer: &Retainer) -> Result<(), Self::Error> {
+    fn heartbeat(&self, _retainer: &Retainer, _now: Timestamp) -> Result<(), Self::Error> {
         Ok(())
     }
 
@@ -96,6 +96,7 @@ fn pending_claim() -> Claim {
             clause: Vec::new(),
         },
         retainer: Retainer::new(Uuid::new_v4()),
+        lease_expiry: Timestamp::from_millis(0),
     }
 }
 

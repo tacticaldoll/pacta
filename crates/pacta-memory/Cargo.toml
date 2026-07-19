@@ -1,0 +1,14 @@
+[package]
+name = "pacta-memory"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "In-memory Pacta Registry backend with real lease and lapse semantics."
+publish = false
+
+[dependencies]
+pacta-contract.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+pacta-conformance.workspace = true

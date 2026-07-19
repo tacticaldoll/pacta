@@ -46,6 +46,33 @@ impl Retainer {
     }
 }
 
+/// A point in time as milliseconds since an epoch the runtime chooses. This is a
+/// pure value: the core names time but never reads it. There is deliberately no
+/// `now` constructor — a runtime obtains the current time and injects it, keeping
+/// lease decisions deterministic and testable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct Timestamp(u64);
+
+impl Timestamp {
+    /// Build a timestamp from milliseconds since the runtime's chosen epoch.
+    #[must_use]
+    pub fn from_millis(millis: u64) -> Self {
+        Self(millis)
+    }
+
+    /// The milliseconds since the runtime's chosen epoch.
+    #[must_use]
+    pub fn as_millis(self) -> u64 {
+        self.0
+    }
+
+    /// The timestamp `millis` milliseconds after this one, saturating at the maximum.
+    #[must_use]
+    pub fn plus_millis(self, millis: u64) -> Self {
+        Self(self.0.saturating_add(millis))
+    }
+}
+
 /// A claimed pact and the retainer required to settle it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claim {
@@ -53,7 +80,9 @@ pub struct Claim {
     pub pact: Pact,
     /// Authority required to heartbeat, fulfill, or breach the claim.
     pub retainer: Retainer,
-    // Retainer expiry information would go here.
+    /// When the claim's lease expires. After this the pact may be lapsed and
+    /// reclaimed unless the holder heartbeats first.
+    pub lease_expiry: Timestamp,
 }
 
 /// The lifecycle outcome an execution produces for a claimed pact.
@@ -70,20 +99,32 @@ pub enum Outcome {
 pub type Settlement = Outcome;
 
 /// The Registry manages the lifecycle of Pacts. It is a pure state machine.
+///
+/// Time is injected: [`claim`](Registry::claim) and
+/// [`heartbeat`](Registry::heartbeat) take the current time as a parameter, and the
+/// registry reads no ambient clock. Settlement takes no time because a rotated
+/// retainer already tells a stale holder apart from the current one.
 pub trait Registry: Send + Sync {
     /// Error returned by the registry implementation.
     type Error;
 
-    /// Claim a pact for execution from one of the requested dockets.
-    fn claim(&self, dockets: &[&str]) -> Result<Option<Claim>, Self::Error>;
+    /// Claim a pact for execution from one of the requested dockets, using `now`
+    /// to set the new lease and to reclaim any pact whose lease already expired
+    /// without settlement — a lapse, realized through this normal claim path.
+    /// Reclaiming rotates the retainer, so the prior holder can no longer settle.
+    fn claim(&self, dockets: &[&str], now: Timestamp) -> Result<Option<Claim>, Self::Error>;
 
-    /// Extend the retainer of an ongoing claim.
-    fn heartbeat(&self, retainer: &Retainer) -> Result<(), Self::Error>;
+    /// Extend the retainer's lease using `now`. A heartbeat presented after the
+    /// lease already expired is rejected: the holder must claim again rather than
+    /// revive a lapsed lease, so two holders never both hold settlement authority.
+    fn heartbeat(&self, retainer: &Retainer, now: Timestamp) -> Result<(), Self::Error>;
 
-    /// Mark the pact as successfully fulfilled.
+    /// Mark the pact as successfully fulfilled. Rejected when the retainer is not
+    /// the current holder.
     fn fulfill(&self, retainer: &Retainer) -> Result<(), Self::Error>;
 
-    /// Mark the pact as breached.
+    /// Mark the pact as breached. Rejected when the retainer is not the current
+    /// holder.
     fn breach(&self, retainer: &Retainer) -> Result<(), Self::Error>;
 }
 
@@ -217,6 +258,7 @@ pub mod kernel {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use crate::Timestamp;
         use uuid::Uuid;
 
         fn claim() -> Claim {
@@ -228,6 +270,7 @@ pub mod kernel {
                     clause: Vec::new(),
                 },
                 retainer: Retainer::new(Uuid::new_v4()),
+                lease_expiry: Timestamp::from_millis(0),
             }
         }
 

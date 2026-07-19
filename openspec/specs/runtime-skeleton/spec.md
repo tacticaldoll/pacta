@@ -5,9 +5,7 @@
 Define Pacta's first runtime skeleton: a Pacta-native executor abstraction, a
 mechanical driver loop, and the runtime behaviors deliberately deferred from the
 initial skeleton.
-
 ## Requirements
-
 ### Requirement: Pacta-Native Executor
 Pacta SHALL expose an executor abstraction using Pacta runtime vocabulary rather than Tower as the core public API.
 
@@ -112,3 +110,19 @@ Pacta SHALL keep orchestration policies out of the first runtime skeleton.
 #### Scenario: Backends are not in the skeleton
 - **WHEN** the runtime skeleton is implemented
 - **THEN** it does not add memory, SQLite, Postgres, Redis, or other registry backends
+
+### Requirement: Runtime Injects Current Time
+The runtime SHALL supply the current time to time-dependent registry operations
+while the sans-I/O kernel stays time-free, so reading the clock is a runtime
+concern and the kernel commits to no time source.
+
+#### Scenario: The driver injects time into time-dependent registry operations
+- **WHEN** the driver performs a claim directive
+- **THEN** it obtains the current time and passes it to the time-dependent
+  registry operation rather than the registry reading a clock itself
+
+#### Scenario: The kernel issues time-free directives
+- **WHEN** the kernel issues a claim directive
+- **THEN** the directive carries no time, and the runtime attaches the current
+  time when it performs the directive
+
