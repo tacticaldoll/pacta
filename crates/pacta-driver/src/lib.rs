@@ -79,9 +79,10 @@ where
 ///
 /// This is a **reference** runtime skeleton. It drives one step synchronously —
 /// claim, execute, settle — and never heartbeats or reclaims within a step: it does
-/// not extend a lease while its executor runs (so a long task's lease can *expire*
-/// mid-step), and it settles by matching the retainer rather than re-claiming. It is
-/// therefore safe for tasks shorter than the lease (the lease never expires mid-step)
+/// not extend a lease while its executor runs (so a long-running pact's lease can
+/// *expire* mid-step), and it settles by matching the retainer rather than
+/// re-claiming. It is therefore safe for pacts shorter than the lease (the lease
+/// never expires mid-step)
 /// and for single-worker use (no concurrent claimer can *reclaim* an expired lease
 /// mid-step). A workload that is both long-running *and* multi-worker should compose
 /// its own loop over the [`Registry`] contract (which includes `heartbeat`); the
@@ -263,7 +264,11 @@ mod tests {
             Ok(())
         }
 
-        fn release(&self, _retainer: &Retainer, _rearm_at: Timestamp) -> Result<(), Self::Error> {
+        fn release(
+            &self,
+            _retainer: &Retainer,
+            _reclaimable_at: Timestamp,
+        ) -> Result<(), Self::Error> {
             Ok(())
         }
     }

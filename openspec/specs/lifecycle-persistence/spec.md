@@ -85,25 +85,25 @@ idempotent. Exactly-once delivery SHALL NOT be promised as a core guarantee.
 - **THEN** it does not claim exactly-once delivery, which remains deferred
 
 ### Requirement: Mechanism Not Policy
-The registry SHALL own only the lease-expiry, lapse, and deferred-re-arm mechanism. It SHALL
+The registry SHALL own only the lease-expiry, lapse, and deferred-reclaim mechanism. It SHALL
 NOT own retry, backoff, attempt limits, or Tribunal routing, which stay user-owned through
-middleware or explicitly deferred. Honoring a consumer-injected re-arm instant is a mechanism,
-not a policy: the registry stores and compares that instant exactly as it honors injected
-`now`, and computes no interval of its own.
+middleware or explicitly deferred. Honoring a consumer-injected reclaimable instant is a
+mechanism, not a policy: the registry stores and compares that instant exactly as it honors
+injected `now`, and computes no interval of its own.
 
 #### Scenario: The registry computes no retry or backoff
-- **WHEN** a pact lapses or is released with a re-arm instant
+- **WHEN** a pact lapses or is released with a reclaimable instant
 - **THEN** the registry neither computes a backoff interval nor decides whether or how many
-  times the pact will be re-attempted; any re-arm instant it honors was computed and supplied
-  by the consumer
+  times the pact will be re-attempted; any reclaimable instant it honors was computed and
+  supplied by the consumer
 
-#### Scenario: A re-arm instant is honored, not decided
-- **WHEN** a consumer releases a claim with a re-arm `Timestamp`
+#### Scenario: A reclaimable instant is honored, not decided
+- **WHEN** a consumer releases a claim with a reclaimable `Timestamp`
 - **THEN** the registry only stores that instant and makes the pact claimable at or after it,
   the same way it honors injected `now`, deciding no delay of its own
 
 #### Scenario: Attempt limits and Tribunal routing stay outside the registry
-- **WHEN** a pact has lapsed or been re-armed one or more times
+- **WHEN** a pact has lapsed or been released one or more times
 - **THEN** deciding an attempt ceiling or moving the pact to Tribunal is not a registry
   responsibility and is left to user-owned policy or a later change
 
@@ -163,26 +163,26 @@ is why the user's `Executor` must be idempotent.
 - **THEN** the registry rejects the heartbeat and the holder must claim again to
   continue
 
-### Requirement: Deferred Re-Arm On Release
+### Requirement: Deferred Reclaim On Release
 The registry SHALL provide a non-terminal `release` operation that relinquishes a held claim
-and makes the pact claimable again only at or after a consumer-supplied re-arm `Timestamp`.
-The retainer of the current holder and the re-arm instant SHALL be call parameters; the
-re-arm instant SHALL NOT be a field of `Pact`, so `Pact` continues to carry no delay.
-`release` SHALL be distinct from `fulfill` and `breach`: it concludes no obligation and leaves
-the pact to be attempted again. The registry SHALL compute no delay — it honors the injected
-instant exactly as it honors injected `now`. On release the registry SHALL rotate authority so
-the prior retainer can no longer settle or heartbeat, identical to a lapse.
+and makes the pact reclaimable again only at or after a consumer-supplied `Timestamp`. The
+retainer of the current holder and that instant SHALL be call parameters; the instant SHALL
+NOT be a field of `Pact`, so `Pact` continues to carry no delay. `release` SHALL be distinct
+from `fulfill` and `breach`: it concludes no obligation and leaves the pact to be attempted
+again. The registry SHALL compute no delay — it honors the injected instant exactly as it
+honors injected `now`. On release the registry SHALL rotate authority so the prior retainer
+can no longer settle or heartbeat, identical to a lapse.
 
-#### Scenario: A released pact is not claimable before its re-arm instant
-- **WHEN** a holder releases a claim with a future re-arm instant and a claim is attempted before that instant
+#### Scenario: A released pact is not claimable before its reclaimable instant
+- **WHEN** a holder releases a claim with a future reclaimable instant and a claim is attempted before that instant
 - **THEN** the registry does not return the pact
 
-#### Scenario: A released pact is claimable at or after its re-arm instant
-- **WHEN** a claim is attempted at or after a released pact's re-arm instant
+#### Scenario: A released pact is claimable at or after its reclaimable instant
+- **WHEN** a claim is attempted at or after a released pact's reclaimable instant
 - **THEN** the pact is reclaimed through the normal claim path
 
-#### Scenario: Immediate re-arm is a voluntary lapse
-- **WHEN** a holder releases a claim with a re-arm instant at or before now
+#### Scenario: An immediate reclaimable instant is a voluntary lapse
+- **WHEN** a holder releases a claim with a reclaimable instant at or before now
 - **THEN** the pact is immediately claimable again, as if its lease had lapsed
 
 #### Scenario: Release rotates authority
