@@ -17,12 +17,13 @@ authoritative contributor and agent guide; this file is a short checklist.
    - implement against `openspec/changes/<change-name>/specs/`
    - check off tasks only after code and tests pass
    - commit coherent compiling milestones as `feat(...)` or `fix(...)`
-4. Sync verified semantics:
-   - promote verified delta specs into `openspec/specs/`
+4. Sync verified semantics, then retire the change:
+   - promote verified delta specs into `openspec/specs/` (agent-driven; this CLI
+     has no `sync` command, and its `archive` also moves the change — which we no
+     longer do)
+   - `git rm -r openspec/changes/<change-name>/` — its content now lives in
+     `openspec/specs/` and git history; there is no archive
    - commit as `docs(specs): sync <change-name>`
-5. Archive the completed change:
-   - `openspec archive <change-name>`
-   - commit as `chore(openspec): archive <change-name>`
 
 ## Commit Granularity
 
