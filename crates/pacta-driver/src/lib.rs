@@ -213,7 +213,7 @@ mod tests {
                 kind: "example".to_string(),
                 clause: Vec::new(),
             },
-            retainer: Retainer(Uuid::new_v4()),
+            retainer: Retainer::new(Uuid::new_v4()),
         }
     }
 

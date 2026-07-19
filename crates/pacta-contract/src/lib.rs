@@ -25,12 +25,26 @@ pub struct Pact {
     pub clause: Vec<u8>,
 }
 
-/// An opaque token proving authority to settle a specific claim.
+/// A retainer: the authority token a registry issues with a claim and validates
+/// when settling it. Authority is registry-validated — a forged identifier does not
+/// match an issued claim — not proven by the type system. Construct via
+/// [`Retainer::new`] and read the identifier via [`Retainer::id`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Retainer(
-    /// Opaque retainer identifier.
-    pub Uuid,
-);
+pub struct Retainer(Uuid);
+
+impl Retainer {
+    /// Mint a retainer from an identifier. A registry issues tokens through this.
+    #[must_use]
+    pub fn new(id: Uuid) -> Self {
+        Self(id)
+    }
+
+    /// The retainer's identifier, which a registry validates on settlement.
+    #[must_use]
+    pub fn id(&self) -> Uuid {
+        self.0
+    }
+}
 
 /// A claimed pact and the retainer required to settle it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -213,7 +227,7 @@ pub mod kernel {
                     kind: "example".to_string(),
                     clause: Vec::new(),
                 },
-                retainer: Retainer(Uuid::new_v4()),
+                retainer: Retainer::new(Uuid::new_v4()),
             }
         }
 
