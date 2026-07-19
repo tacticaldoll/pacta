@@ -2,13 +2,87 @@
 
 #![forbid(unsafe_code)]
 
-use std::process::ExitCode;
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
+
 use tianheng::prelude::*;
 
 const CONTRACT_REASON: &str = "pacta-contract is the isolated core contract. It may depend only on serde and uuid, and never on another workspace crate or runtime framework.";
 const EXECUTOR_REASON: &str = "pacta-executor owns the Pacta-native execution vocabulary. It may depend only on pacta-contract, never on drivers, adapters, backends, or external frameworks.";
 const DRIVER_REASON: &str = "pacta-driver is mechanical runtime glue. It may depend only on pacta-contract and pacta-executor, never on adapters, backends, or external frameworks.";
 const GOVERNANCE_REASON: &str = "the governance gate must stay independent of the graph it judges: depend only on tianheng, never on a workspace crate.";
+const PROSE_REASON: &str =
+    "active prose must not reintroduce stale architecture-defining vocabulary";
+
+const ACTIVE_PROSE_FILES: &[&str] = &[
+    "AGENTS.md",
+    "PROJECT.md",
+    "README.md",
+    "BACKLOG.md",
+    "docs/blueprint.md",
+    "docs/development-flow.md",
+    "docs/domain-language.md",
+];
+
+const STALE_PHRASES: &[StalePhrase] = &[
+    StalePhrase {
+        phrase: "Tower-native",
+        reason: "Pacta core is Pacta-native; framework vocabulary is adapter scope.",
+    },
+    StalePhrase {
+        phrase: "Tower-first",
+        reason: "Pacta's product identity must not be framework-first.",
+    },
+    StalePhrase {
+        phrase: "middleware ecosystem",
+        reason: "Pacta grows through governed Pacta-native patterns, not ecosystem drift.",
+    },
+    StalePhrase {
+        phrase: "Zero-Dependency",
+        reason: "dependency rules live in executable Tianheng boundaries, not slogans.",
+    },
+    StalePhrase {
+        phrase: "Store is Lifecycle",
+        reason: "the current public lifecycle role is Registry.",
+    },
+    StalePhrase {
+        phrase: "Store trait",
+        reason: "the current public lifecycle contract is Registry.",
+    },
+    StalePhrase {
+        phrase: "`Store` manages",
+        reason: "the current public lifecycle role is Registry.",
+    },
+    StalePhrase {
+        phrase: "`reserve`",
+        reason: "the current lifecycle acquisition term is claim.",
+    },
+    StalePhrase {
+        phrase: "`ack`",
+        reason: "the current successful settlement term is fulfill.",
+    },
+    StalePhrase {
+        phrase: "`nack`",
+        reason: "the current failed settlement term is breach.",
+    },
+];
+
+#[derive(Debug, Clone, Copy)]
+struct StalePhrase {
+    phrase: &'static str,
+    reason: &'static str,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ProseViolation {
+    path: String,
+    line: usize,
+    phrase: &'static str,
+    reason: &'static str,
+}
 
 fn constitution() -> Constitution {
     Constitution::new("pacta")
@@ -35,14 +109,99 @@ fn constitution() -> Constitution {
 }
 
 fn main() -> ExitCode {
-    tianheng::run(&constitution(), std::env::args())
+    let args = env::args().collect::<Vec<_>>();
+
+    if should_check_prose(&args) {
+        let manifest = manifest_path_from_args(&args);
+        let root = manifest
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+
+        if let Err(violations) = check_active_prose(&root) {
+            eprintln!("pacta prose governance failed: {PROSE_REASON}");
+            for violation in violations {
+                eprintln!(
+                    "{}:{}: `{}` - {}",
+                    violation.path, violation.line, violation.phrase, violation.reason
+                );
+            }
+            return ExitCode::from(1);
+        }
+    }
+
+    tianheng::run(&constitution(), args)
+}
+
+fn should_check_prose(args: &[String]) -> bool {
+    args.iter().skip(1).any(|arg| arg == "check")
+}
+
+fn manifest_path_from_args(args: &[String]) -> PathBuf {
+    for index in 0..args.len() {
+        if args[index] == "--manifest-path"
+            && let Some(path) = args.get(index + 1)
+        {
+            return PathBuf::from(path);
+        }
+
+        if let Some(path) = args[index].strip_prefix("--manifest-path=") {
+            return PathBuf::from(path);
+        }
+    }
+
+    PathBuf::from("Cargo.toml")
+}
+
+fn check_active_prose(root: &Path) -> Result<(), Vec<ProseViolation>> {
+    let mut violations = Vec::new();
+
+    for relative in ACTIVE_PROSE_FILES {
+        let path = root.join(relative);
+        let Ok(content) = fs::read_to_string(&path) else {
+            continue;
+        };
+
+        violations.extend(check_prose_content(relative, &content));
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(violations)
+    }
+}
+
+fn check_prose_content(path: &str, content: &str) -> Vec<ProseViolation> {
+    let mut violations = Vec::new();
+    let mut legacy_mapping = false;
+
+    for (index, line) in content.lines().enumerate() {
+        if path == "docs/domain-language.md" && line.trim() == "## Legacy Mapping" {
+            legacy_mapping = true;
+        }
+
+        if legacy_mapping {
+            continue;
+        }
+
+        for rule in STALE_PHRASES {
+            if line.contains(rule.phrase) {
+                violations.push(ProseViolation {
+                    path: path.to_owned(),
+                    line: index + 1,
+                    phrase: rule.phrase,
+                    reason: rule.reason,
+                });
+            }
+        }
+    }
+
+    violations
 }
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::path::{Path, PathBuf};
-
     use super::*;
 
     #[test]
@@ -98,6 +257,55 @@ pacta-executor = { path = "../pacta-executor" }
                 && id.rule == "restrict dependencies to"
                 && id.finding == "tower"
         }));
+    }
+
+    #[test]
+    fn current_active_prose_satisfies_governance() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+
+        assert_eq!(check_active_prose(&root), Ok(()));
+    }
+
+    #[test]
+    fn stale_prose_vocabulary_is_rejected() {
+        let violations = check_prose_content(
+            "AGENTS.md",
+            "Pacta is Tower-native and the `Store` manages `reserve`.\n",
+        );
+
+        assert_eq!(
+            violations,
+            vec![
+                ProseViolation {
+                    path: "AGENTS.md".to_owned(),
+                    line: 1,
+                    phrase: "Tower-native",
+                    reason: "Pacta core is Pacta-native; framework vocabulary is adapter scope.",
+                },
+                ProseViolation {
+                    path: "AGENTS.md".to_owned(),
+                    line: 1,
+                    phrase: "`Store` manages",
+                    reason: "the current public lifecycle role is Registry.",
+                },
+                ProseViolation {
+                    path: "AGENTS.md".to_owned(),
+                    line: 1,
+                    phrase: "`reserve`",
+                    reason: "the current lifecycle acquisition term is claim.",
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn domain_language_legacy_mapping_is_allowed() {
+        let violations = check_prose_content(
+            "docs/domain-language.md",
+            "## Legacy Mapping\n| `Store` | `Registry` |\n| `ack` | `fulfill` |\n",
+        );
+
+        assert!(violations.is_empty());
     }
 
     struct TempWorkspace {

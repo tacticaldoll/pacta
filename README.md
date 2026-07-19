@@ -1,66 +1,71 @@
 # Pacta
 
-A Pacta-native, middleware-oriented contract runtime for Rust.
+Pacta is a thin, elegant durable contract fabric and governed pattern framework
+for Rust user-defined obligations.
 
-Pacta was born from a fundamental critique of traditional, broker-centric job queues. Traditional queues suffer from "Semantic Bloat" — they pull execution policies (retries, backoff, routing, dead-letter storage, priority) into the storage layer and the core job envelope. This forces every storage backend (Postgres, Redis, etc.) to implement complex business logic, making the system heavy, hard to extend, and prone to breaking.
+It is designed for the narrow space between "I need durable execution" and "I
+do not want a broker-shaped framework to own my application semantics." Pacta
+keeps the durable lifecycle small, then lets users attach obligation semantics,
+execution composition, registry persistence, and integrations as governed
+patterns.
 
-Pacta takes a different approach: **Execution is Middleware, the Registry is
-purely a Lifecycle State Machine.**
+```text
+Signal -> Pact -> Claim -> Execution -> Settlement
+```
 
-## Philosophy
+## Why Pacta
 
-By completely delegating execution orchestration (retries, timeouts, tracing,
-rate limiting) to the middleware ecosystem, the storage role (`Registry`)
-degrades into a pure, minimal state machine. The Registry only tracks lifecycle
-transitions: `claim`, `heartbeat`, `fulfill`, and `breach`.
+Many queue runtimes become heavy when retries, backoff, routing, scheduling,
+dead-letter policy, and backend behavior all collapse into one storage-shaped
+center. Pacta takes the opposite path:
 
-- **Registry**: Pure state machine. Never computes backoff, never manages delays,
-  and never inspects clauses.
-- **Executor**: Public role for executing claimed pacts through middleware.
-- **Middleware / Policy**: Pacta-native decorators and orchestration intents. Currently an architectural skeleton; actual retry, timeout, and rate-limit behavior are deferred to future implementation.
-- **Contract**: Zero-dependency `pacta-contract` enforced by `tianheng`.
+- `Registry` preserves lifecycle authority.
+- `Executor` handles claimed pacts.
+- `Middleware` and `Policy` describe Pacta-native execution composition.
+- Adapters and backends remain outside the core contract.
+- Tianheng governance rejects architecture drift.
+
+The result is deliberately thin: enough structure to bite, not enough bulk to
+own the user's domain.
 
 ## Domain Language
 
-Pacta's public API uses contract and arbitration terms:
+Pacta uses contract and arbitration terms as architecture, not branding:
 
 - `Pact` - durable unit of obligation.
 - `Docket` - grouping from which pacts are selected.
 - `Clause` - business data carried by a pact.
+- `Brief` - non-business operational context attached to a pact.
 - `Claim` and `Retainer` - short-term processing authority.
-- `Fulfill` and `Breach` - lifecycle settlement outcomes.
-- `Middleware` and `Policy` - native execution composition and orchestration intent.
+- `Fulfill` and `Breach` - settlement outcomes.
 - `Tribunal` - terminal review for exhausted pacts.
 
 See `docs/domain-language.md` for the full glossary and legacy mapping.
 
-## Getting Started
+## Architecture
 
-*(Wait for Phase 2 implementation...)*
+Start with:
+
+- `PROJECT.md` for vision, positioning, and non-goals.
+- `docs/blueprint.md` for extension surfaces and non-commitment boundaries.
+- `openspec/specs/` for shipped requirements.
+- `BACKLOG.md` for deferred decisions and candidate patterns.
 
 ## Contributing
 
-This project uses **OpenSpec** (spec-driven development) and strictly enforces AI-agent-friendly governance. 
-
-1. Please read `AGENTS.md` before contributing. It contains the project's absolute axioms and adversarial review stance.
-2. Read `PROJECT.md` for terminology.
-3. Check `BACKLOG.md` for roadmap and deferred work.
-4. Use the `openspec` CLI to propose and apply changes.
-5. Run the quality gates before checking off implementation tasks.
+This project uses OpenSpec and Tianheng-native governance.
 
 ```bash
-# Scaffold a new change
-openspec new change "your-feature-name"
+openspec new change "your-change-name"
 
-# Definition of Done
-cargo build
-cargo test
+cargo build --workspace
+cargo test --workspace
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
-RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
-cargo deny check
 cargo run -p pacta-governance -- check --manifest-path Cargo.toml
 ```
+
+Read `AGENTS.md` before making repository changes.
 
 ## License
 

@@ -1,12 +1,4 @@
-# Composition Governance Specification
-
-## Purpose
-
-Define Pacta's core composition boundary: Pacta-native middleware and policy
-vocabulary in core crates, adapter-owned framework integrations outside core,
-and executable dependency closure for core runtime crates.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Pacta-Native Composition Boundary
 Pacta SHALL define execution composition through Pacta-native middleware, policy, and pattern vocabulary before exposing adapter-specific APIs.
@@ -41,14 +33,3 @@ Pacta SHALL treat framework adapters as integration scope rather than core runti
 #### Scenario: Adapter types do not leak back into core
 - **WHEN** adapter-owned public types exist
 - **THEN** Tianheng semantic governance is updated so core crate public APIs do not expose those adapter-owned types
-
-### Requirement: Core Dependency Closure
-Pacta SHALL keep core crate normal dependencies closed by executable governance.
-
-#### Scenario: Core dependency additions require governance amendment
-- **WHEN** `pacta-contract`, `pacta-executor`, or `pacta-driver` gains a new normal dependency
-- **THEN** the Tianheng constitution must explicitly allow that dependency or fail
-
-#### Scenario: Framework dependencies are rejected from core
-- **WHEN** a core crate adds a normal dependency on Tower, HTTP adapter, backend, or other integration framework crates without an explicit governance amendment
-- **THEN** the Tianheng governance reaction fails
