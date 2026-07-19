@@ -129,6 +129,18 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
     `CHANGELOG.md`, publish the six crates, `release/0.2.0 → main` squash, tag. Async needs **no**
     separate publish flip — it ships inside `pacta-contract` behind the `async` feature; the published
     set is unchanged.
+  - **Deferred: drop the `Send + Sync` supertrait to fully deliver "coloring is the consumer's".**
+    Both `Registry` and `AsyncRegistry` declare `: Send + Sync`, requiring every backend *type* to be
+    thread-shareable — a mild runtime property the contract imposes, in tension with the brand's
+    "the runtime and its coloring are the consumer's". A single-threaded consumer with a deliberately
+    `!Send` backend (an `Rc`-based store) cannot implement the trait today. The async *futures* are
+    already `Send`-free (AFIT); this is only the backend-type supertrait. Dropping it would let the
+    contention harness (`run_async_contention`, which shares an `Arc` across `std::thread`s) bound
+    `Send + Sync + 'static` itself, leaving the trait coloring-free. Deferred, not done in 0.2.0:
+    it is a breaking trait change with unvetted ripples (the `Driver`, the conformance runners, the
+    sync binding too), and a `!Send` backend is a niche case (durable backends are almost always
+    `Send`). Revisit as a deliberate change with the ripple analysis; until then the prose is precise
+    ("no `Send` on the *futures*; a backend type is `Send + Sync`").
 
 Surface: lifecycle persistence.
 
