@@ -3,8 +3,9 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-use pacta_contract::{Registry, Retainer};
-use pacta_executor::{Execution, Executor, Outcome};
+use pacta_contract::kernel::{Directive, Kernel, Notice, StepResult};
+use pacta_contract::{Outcome, Registry};
+use pacta_executor::{Execution, Executor};
 
 /// One mechanical driver step result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,7 +27,7 @@ pub enum DriverError<RegistryError, ExecutorError> {
     Executor(ExecutorError),
 }
 
-/// Mechanical loop that claims pacts, executes them, and settles claims.
+/// Mechanical loop that performs the directives the sans-I/O kernel issues.
 pub struct Driver<R, E> {
     registry: R,
     executor: E,
@@ -61,50 +62,61 @@ where
     R: Registry,
     E: Executor,
 {
-    /// Perform one claim, execute, and settle step.
+    /// Perform one claim, execute, and settle step by driving the kernel: the
+    /// kernel decides each directive; the driver performs it and feeds a notice
+    /// back, deciding no lifecycle outcome itself.
     pub fn step(&mut self) -> Result<Step, DriverError<R::Error, E::Error>> {
         let dockets: Vec<&str> = self.dockets.iter().map(String::as_str).collect();
-        let Some(claim) = self
-            .registry
-            .claim(&dockets)
-            .map_err(DriverError::Registry)?
-        else {
-            return Ok(Step::Idle);
-        };
+        let mut kernel = Kernel::new();
+        let mut pending_executor_error: Option<E::Error> = None;
 
-        let retainer = claim.retainer;
-        let outcome = match self.executor.execute(Execution::new(claim.pact)) {
-            Ok(outcome) => outcome,
-            Err(error) => {
-                self.breach(&retainer)?;
-                return Err(DriverError::Executor(error));
+        loop {
+            if let Some(result) = kernel.result() {
+                return match result {
+                    StepResult::Idle => Ok(Step::Idle),
+                    StepResult::Settled(outcome) => {
+                        if let Some(error) = pending_executor_error {
+                            return Err(DriverError::Executor(error));
+                        }
+                        Ok(match outcome {
+                            Outcome::Fulfilled => Step::Fulfilled,
+                            Outcome::Breached => Step::Breached,
+                        })
+                    }
+                };
             }
-        };
 
-        let step = match outcome {
-            Outcome::Fulfilled => Step::Fulfilled,
-            Outcome::Breached => Step::Breached,
-        };
-
-        match step {
-            Step::Fulfilled => self.fulfill(&retainer)?,
-            Step::Breached => self.breach(&retainer)?,
-            Step::Idle => {}
+            match kernel.poll() {
+                Directive::Claim => {
+                    let claim = self
+                        .registry
+                        .claim(&dockets)
+                        .map_err(DriverError::Registry)?;
+                    kernel.on_event(Notice::Claimed(claim));
+                }
+                Directive::Execute(pact) => match self.executor.execute(Execution::new(pact)) {
+                    Ok(outcome) => kernel.on_event(Notice::Executed(outcome)),
+                    Err(error) => {
+                        pending_executor_error = Some(error);
+                        kernel.on_event(Notice::ExecutionFailed);
+                    }
+                },
+                Directive::Settle(retainer, outcome) => {
+                    match outcome {
+                        Outcome::Fulfilled => self
+                            .registry
+                            .fulfill(&retainer)
+                            .map_err(DriverError::Registry)?,
+                        Outcome::Breached => self
+                            .registry
+                            .breach(&retainer)
+                            .map_err(DriverError::Registry)?,
+                    }
+                    kernel.on_event(Notice::Settled);
+                }
+                Directive::Idle => return Ok(Step::Idle),
+            }
         }
-
-        Ok(step)
-    }
-
-    fn fulfill(&self, retainer: &Retainer) -> Result<(), DriverError<R::Error, E::Error>> {
-        self.registry
-            .fulfill(retainer)
-            .map_err(DriverError::Registry)
-    }
-
-    fn breach(&self, retainer: &Retainer) -> Result<(), DriverError<R::Error, E::Error>> {
-        self.registry
-            .breach(retainer)
-            .map_err(DriverError::Registry)
     }
 }
 
@@ -112,7 +124,7 @@ where
 mod tests {
     use std::sync::Mutex;
 
-    use pacta_contract::{Claim, Pact};
+    use pacta_contract::{Claim, Pact, Retainer};
     use uuid::Uuid;
 
     use super::*;

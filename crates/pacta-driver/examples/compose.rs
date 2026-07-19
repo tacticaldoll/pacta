@@ -5,7 +5,9 @@
 //! pass-through witness (the composition seam), and drives one mechanical step:
 //! claim -> execute -> settle. The witness forwards execution unchanged and
 //! occupies the exact slot a future retry or timeout middleware would fill; this
-//! example intentionally carries no orchestration behaviour.
+//! example intentionally carries no orchestration behaviour. The `Driver` is now a
+//! sans-I/O kernel runtime loop internally, but the public composition surface is
+//! unchanged.
 
 #![forbid(unsafe_code)]
 
