@@ -44,7 +44,8 @@ pub enum Step {
 pub enum DriverError<RegistryError, ExecutorError> {
     /// Registry operation failed.
     Registry(RegistryError),
-    /// Executor infrastructure failed after the claim was breached.
+    /// Executor infrastructure failed; the claim was left unsettled to lapse and be
+    /// reclaimed (no settlement was recorded).
     Executor(ExecutorError),
 }
 
@@ -132,15 +133,16 @@ where
             if let Some(result) = kernel.result() {
                 return match result {
                     StepResult::Idle => Ok(Step::Idle),
-                    StepResult::Settled(outcome) => {
-                        if let Some(error) = pending_executor_error {
-                            return Err(DriverError::Executor(error));
-                        }
-                        Ok(match outcome {
-                            Outcome::Fulfilled => Step::Fulfilled,
-                            Outcome::Breached => Step::Breached,
-                        })
-                    }
+                    StepResult::Settled(outcome) => Ok(match outcome {
+                        Outcome::Fulfilled => Step::Fulfilled,
+                        Outcome::Breached => Step::Breached,
+                    }),
+                    // An unsettled step means execution failed: settle nothing and
+                    // surface the executor error. The claim lapses and is reclaimed.
+                    StepResult::Unsettled => Err(DriverError::Executor(
+                        pending_executor_error
+                            .expect("an unsettled step implies a pending executor error"),
+                    )),
                     _ => unreachable!("driver handles every current kernel step result"),
                 };
             }
@@ -332,7 +334,7 @@ mod tests {
     }
 
     #[test]
-    fn executor_error_breaches_claim() {
+    fn executor_error_leaves_claim_unsettled() {
         let registry = TestRegistry::with_claim(claim());
         let executor = TestExecutor {
             outcome: Err(TestError),
@@ -340,6 +342,10 @@ mod tests {
         };
         let mut driver = Driver::new(registry, executor, ["default".to_string()]);
 
+        // An infrastructure failure surfaces the executor error and settles nothing:
+        // neither fulfilled nor breached. The claim is left unsettled to lapse and be
+        // reclaimed — that lapse-reclaim is proven at the registry level by
+        // `pacta-conformance` (`expired_lease_lapses_and_reclaims_...`).
         assert_eq!(driver.step(), Err(DriverError::Executor(TestError)));
         let state = driver
             .registry()
@@ -347,7 +353,7 @@ mod tests {
             .lock()
             .expect("registry state should not be poisoned");
         assert_eq!(state.fulfilled, 0);
-        assert_eq!(state.breached, 1);
+        assert_eq!(state.breached, 0);
         drop(state);
         assert_eq!(driver.executor().executions, 1);
     }

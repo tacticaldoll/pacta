@@ -254,8 +254,10 @@ pub mod kernel {
         Claimed(Option<Claim>),
         /// An execution produced a lifecycle outcome.
         Executed(Outcome),
-        /// The execution infrastructure failed to run the pact. The kernel decides a
-        /// breach settlement for this notice while the runtime surfaces the error.
+        /// The execution infrastructure failed to run the pact — the executor
+        /// produced no outcome. The kernel fabricates no outcome for this notice: it
+        /// settles nothing and reaches an unsettled terminal, leaving the claim to
+        /// lapse and be reclaimed, while the runtime surfaces the error to its caller.
         ExecutionFailed,
         /// A settlement was persisted.
         Settled,
@@ -272,6 +274,10 @@ pub mod kernel {
         Idle,
         /// The claim was settled with this outcome.
         Settled(Outcome),
+        /// Execution produced no outcome (an infrastructure failure), so nothing was
+        /// settled. The claim is left held-but-unsettled to lapse and be reclaimed;
+        /// the kernel fabricates no `Outcome` from the absence of one.
+        Unsettled,
     }
 
     #[derive(Debug)]
@@ -287,6 +293,7 @@ pub mod kernel {
         },
         DoneIdle,
         DoneSettled(Outcome),
+        DoneUnsettled,
     }
 
     /// The pure lifecycle state machine for a single step.
@@ -313,7 +320,7 @@ pub mod kernel {
                 Phase::Settling { retainer, outcome } => {
                     Directive::Settle(retainer.clone(), *outcome)
                 }
-                Phase::DoneIdle | Phase::DoneSettled(_) => Directive::Idle,
+                Phase::DoneIdle | Phase::DoneSettled(_) | Phase::DoneUnsettled => Directive::Idle,
             }
         }
 
@@ -329,10 +336,7 @@ pub mod kernel {
                 (Phase::Executing { retainer, .. }, Notice::Executed(outcome)) => {
                     Phase::Settling { retainer, outcome }
                 }
-                (Phase::Executing { retainer, .. }, Notice::ExecutionFailed) => Phase::Settling {
-                    retainer,
-                    outcome: Outcome::Breached,
-                },
+                (Phase::Executing { .. }, Notice::ExecutionFailed) => Phase::DoneUnsettled,
                 (Phase::Settling { outcome, .. }, Notice::Settled) => Phase::DoneSettled(outcome),
                 (other, _) => other,
             };
@@ -344,6 +348,7 @@ pub mod kernel {
             match &self.phase {
                 Phase::DoneIdle => Some(StepResult::Idle),
                 Phase::DoneSettled(outcome) => Some(StepResult::Settled(*outcome)),
+                Phase::DoneUnsettled => Some(StepResult::Unsettled),
                 _ => None,
             }
         }
@@ -421,12 +426,9 @@ pub mod kernel {
         }
 
         #[test]
-        fn infrastructure_error_settles_breached() {
+        fn infrastructure_error_is_unsettled() {
             let mut kernel = Kernel::new();
-            assert_eq!(
-                drive(&mut kernel, Err(()), true),
-                StepResult::Settled(Outcome::Breached)
-            );
+            assert_eq!(drive(&mut kernel, Err(()), true), StepResult::Unsettled);
         }
 
         #[test]

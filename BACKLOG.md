@@ -114,10 +114,15 @@ proposal.
 
 ## Recorded Reconsiderations
 
-- Infrastructure-failure handling during execution. Now that a lease can lapse and
-  recover, an infrastructure failure could leave the claim unsettled so it lapses
-  and is reclaimed, rather than being terminally breached as it is today. Recorded
-  for a future proposal; not decided here.
+- Infrastructure-failure handling during execution — resolved. An infrastructure
+  failure now leaves the claim unsettled so it lapses and is reclaimed (at-least-once),
+  rather than being terminally breached: the kernel fabricates no `Outcome` from an
+  execution failure — it reaches an unsettled terminal (`StepResult::Unsettled`) — and
+  the driver settles nothing and surfaces the executor error. Disposition (retry /
+  fail-fast) composes at the `Middleware` seam; the core owns the mechanism, the edge
+  owns the policy. Bounded retry for a poison pact stays deferred to the orchestration
+  cluster (in-process middleware; cross-process via opaque operational metadata the
+  core never interprets).
 - The lifecycle kernel models no heartbeat. Its directives are `Claim`, `Execute`,
   `Settle`, and `Idle` — there is no `Heartbeat` directive — so nothing in the pure
   decision machine ever extends a lease, and the reference `Driver` cannot heartbeat
