@@ -98,19 +98,14 @@ Start with:
 
 ## Contributing
 
-This project uses OpenSpec and Tianheng-native governance.
+This project uses OpenSpec and Tianheng-native governance. Start a change with:
 
 ```bash
 openspec new change "your-change-name"
-
-cargo build --workspace
-cargo test --workspace
-cargo clippy --all-targets -- -D warnings
-cargo fmt --all --check
-cargo run -p pacta-governance -- check --manifest-path Cargo.toml
 ```
 
-Read `AGENTS.md` before making repository changes.
+Run the full Definition of Done (see `AGENTS.md`) before committing, and read
+`AGENTS.md` before making repository changes.
 
 ## License
 

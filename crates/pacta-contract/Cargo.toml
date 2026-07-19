@@ -8,7 +8,7 @@ repository.workspace = true
 readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
-description = "The isolated core contract for the Pacta task runtime."
+description = "The isolated core contract for Pacta: durable lifecycle vocabulary and a sans-I/O kernel."
 publish.workspace = true
 
 [dependencies]
