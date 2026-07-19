@@ -73,3 +73,24 @@ implementation, so no obligation is a contract without a client.
 #### Scenario: Deferred orchestration attaches to the seam, not the core
 - **WHEN** concrete orchestration (retry, timeout, rate-limit) is introduced later
 - **THEN** it arrives as `Middleware` implementations composed onto the existing seam — together with any policy trait and stack-assembler it needs, co-designed so each has a real client — rather than as inert vocabulary frozen into the core ahead of its consumer
+
+### Requirement: Durable Retry Is Demonstrated
+Pacta SHALL carry an executable example that demonstrates durable retry composed from the
+shipped contract: on a failed attempt, a consumer computes a backoff instant — the policy —
+and calls `release(retainer, reclaimable_at)` so the pact is withheld until that instant,
+then reclaimed and finally settled. The example SHALL use only the public API, keep the
+backoff policy in the consumer, inject time rather than read a clock, and self-check its
+outcome so the demonstration cannot silently regress under the Definition of Done. The core
+SHALL compute no backoff in this composition.
+
+#### Scenario: A failed attempt is withheld, then reclaimed after backoff
+- **WHEN** the example runs and an attempt fails
+- **THEN** the pact is released with a future reclaimable instant, is not claimable before that instant, and is reclaimed through the normal claim path at or after it, then settled
+
+#### Scenario: The backoff policy stays in the consumer
+- **WHEN** the example computes the delay before the next attempt
+- **THEN** the delay is computed in consumer code and injected via `release`, and the core computes no backoff interval
+
+#### Scenario: A regressed demonstration fails the gate
+- **WHEN** the example no longer reaches its expected outcome
+- **THEN** running it under the Definition of Done fails rather than passing silently
