@@ -16,25 +16,19 @@ patterns.
 `Signal -> Pact` is user-provided ingress: you turn your own events into pacts.
 Pacta ships the lifecycle from `Pact` onward, not an ingress API.
 
-## Status (0.1.2)
+## Scope
 
-0.1.2 is the thin lifecycle foundation, not a complete durable runtime. It ships:
+Pacta is a thin lifecycle foundation, not a complete durable runtime. It ships the durable
+lifecycle **contract** (`Registry`, over one `apply` transition port — sync, and behind the
+`async` feature an `AsyncRegistry`), a sans-I/O **kernel**, lease/lapse with injected time,
+deferred reclaim (`release`), execution **composition** (`Executor`/`Middleware`), a mechanical
+**driver**, in-memory **reference backends**, a backend-agnostic **conformance** suite, and
+executable **governance**.
 
-- a curated **facade** (`pacta`) — the recommended single entrypoint you depend on;
-- the lifecycle **contract** (`Registry`) and a sans-I/O lifecycle **kernel**;
-- **lease/lapse** semantics with injected time (the core reads no ambient clock);
-- **deferred reclaim** on release (`release(retainer, reclaimable_at)`) — the durable-retry primitive;
-- execution **composition** vocabulary (`Executor`, `Middleware`);
-- a mechanical **driver** that runs the kernel against a registry and executor;
-- an in-memory **reference backend** (`pacta-memory`);
-- a backend-agnostic **conformance** suite (`pacta-conformance`);
-- **executable governance** enforcing the architecture.
-
-Durable/persistent backends deliberately live **outside** this workspace and prove
-themselves against the conformance suite. No ingress API, framework adapters, or
-retry/backoff/timeout *orchestration* ship in 0.1.2 — the deferred-reclaim *primitive*
-`release` does, and retry composes on top of it at the `Middleware` seam. See
-`CHANGELOG.md`.
+It does **not** ship an ingress API, framework adapters, or retry/backoff/timeout orchestration —
+those compose at the `Registry`/`Middleware` seams, and durable/persistent backends live outside
+this workspace and prove themselves against the conformance suite. See `CHANGELOG.md` for what
+each release adds.
 
 ## Why Pacta
 
