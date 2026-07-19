@@ -132,10 +132,15 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
       re-expressed **natively per backend** (a full-scan-free selection, e.g. SQL
       `SKIP LOCKED`), so it is a *translation* (conformance-caught), and the only
       unproven risk lives here.
-    - **Async trait = 2 required primitives + 5 Kernel-driven default methods**
-      (claim/heartbeat/fulfill/breach/release): callers see the faithful five-op
-      contract; backends implement only the two primitives. The frozen **sync**
-      trait keeps its five fat required methods unchanged.
+    - **Async trait (as shipped) = 3 required primitives + a lease accessor + 4
+      Kernel-driven default methods**: primitives `claim`/`load`/`cas` and
+      `lease_millis`; defaults heartbeat/fulfill/breach/release. Callers see the
+      faithful five-op contract; backends implement the three primitives. (The
+      planned 2-primitive `cas` + `claim_select` shape shipped as `claim` plus a
+      `load`/`cas` transition port — a load/cas split, conformance-caught. The
+      earlier "2 primitives + 5 defaults" wording described the plan, not the
+      shipped trait.) The frozen **sync** trait keeps its five fat required methods
+      unchanged.
     - **Ordering/priority is edge policy** (the consumer's, single-sourced in the
       consumer), never a pacta spec parameter — so eligibility-as-data cannot grow
       into a query DSL. Eligibility stays a fixed invariant baked into the contract.
@@ -257,6 +262,16 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
     decomposition introduces and the sync fat-verb shape lacks — is covered by a separate
     multi-threaded contention test against the reference backend. The async binding is therefore
     proven at parity **and** its own race, on pacta's authority, not deferred to worklane's.
+  - **Async manifestation obligations — where the teeth are.** The `contract-manifestation` spec
+    requires `pacta-contract-async` to document its implementer obligations (`cas` must be atomic;
+    `claim` must honor eligibility as a native, full-scan-free selection). Those obligations are
+    enforced **behaviorally** by `pacta-conformance` — the concurrent-contention test proves the
+    atomic-`cas` fence, and the claim scenarios prove eligibility — not by asserting the doc text is
+    present. The doc-text projection is review-enforced, exactly like every other manifestation
+    scenario (the sync facade's included); pacta's prose gate is deliberately forbidden-phrase only,
+    because governance gates architecture, not doc wording. So the manifestation is not "unenforced
+    prose": its substance has a behavioral tooth, and its wording is a review-verified projection —
+    a deliberate split, not a gap.
   - **Version-cadence isolation — delivered (not just claimed).** The async crates carry
     their **own version line** (`pacta-contract-async` / `pacta-memory-async` at `0.1.0`),
     off the workspace lockstep, so the async surface can evolve — even break at `0.x` —
