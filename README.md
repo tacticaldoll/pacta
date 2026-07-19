@@ -45,10 +45,20 @@ This project uses **OpenSpec** (spec-driven development) and strictly enforces A
 2. Read `PROJECT.md` for terminology.
 3. Check `BACKLOG.md` for roadmap and deferred work.
 4. Use the `openspec` CLI to propose and apply changes.
+5. Run the quality gates before checking off implementation tasks.
 
 ```bash
 # Scaffold a new change
 openspec new change "your-feature-name"
+
+# Definition of Done
+cargo build
+cargo test
+cargo clippy --all-targets -- -D warnings
+cargo fmt --all --check
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+cargo deny check
+cargo run -p pacta-governance -- check --manifest-path Cargo.toml
 ```
 
 ## License
