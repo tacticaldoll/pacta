@@ -1,0 +1,20 @@
+[package]
+name = "pacta-contract-async"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords.workspace = true
+categories.workspace = true
+description = "Async binding of the Pacta Registry contract, composing over the shared lifecycle kernel."
+publish.workspace = true
+
+[dependencies]
+pacta-contract.workspace = true
+async-trait.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+uuid.workspace = true
