@@ -8,7 +8,8 @@ members = [
     "crates/pacta-driver",
     "crates/pacta-executor",
     "crates/pacta-governance",
-    "crates/pacta-memory"
+    "crates/pacta-memory",
+    "crates/pacta-memory-async"
 ]
 
 [workspace.package]

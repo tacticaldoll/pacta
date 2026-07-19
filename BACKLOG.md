@@ -181,6 +181,18 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
   - **Status: warranted but not urgent** (the consumer is unblocked via its own
     mirror-port). Decided and planned; **not yet an active change** — open the change
     (and the step-1 spike may run independently) when pacta work is scheduled.
+  - **Landed toward 0.1.3:** the `lifecycle` kernel (single-sourced semantics),
+    `pacta-contract-async` (the `AsyncRegistry` binding), and `pacta-memory-async`
+    (the reference async backend). Still pending: the shared async conformance runner
+    (deferred until worklane's rebind forces it — decide scenario-data-refactor vs
+    `maybe-async` then), and the `claim_select` throughput spike (worklane side).
+  - **Publish cadence — deferred, not decided.** `pacta-contract-async` and
+    `pacta-memory-async` keep the workspace-default `publish` flag; whether/when they
+    enter `release-packaging`'s published set is deferred to **worklane's review against
+    the current async path** (its rebind is what forces a crates.io dependency —
+    force-then-extract). No gate reads the flag and nothing publishes until 0.1.3 is
+    finalized, so this stays open without drift; flip the flags and update
+    `release-packaging` only when that review forces it.
 
 Surface: lifecycle persistence.
 
