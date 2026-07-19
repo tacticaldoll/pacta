@@ -1,7 +1,7 @@
 # surface-tiers Specification
 
 ## Purpose
-TBD - created by archiving change tier-the-public-surface. Update Purpose after archive.
+Declare stability-intent tiers over Pacta's public surface — a recommended tier (the `pacta` facade and the backend-author path) and an advanced tier (`pacta_contract::kernel`) — stated where consumers look, and manifest the advanced tier's driving contract with a doctest.
 ## Requirements
 ### Requirement: Stability Tiers Are Declared
 Pacta SHALL declare stability tiers over its public surface, so a consumer knows

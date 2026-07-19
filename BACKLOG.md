@@ -25,7 +25,8 @@ roadmap and does not create implementation commitments. Shipped truth lives in
   `openspec/specs/`.
 - CI, cargo-deny, rustdoc, clippy, fmt, Tianheng dependency boundaries, workspace
   governance coverage, active-prose governance, the kernel async-exposure
-  reaction, and the ambient-time scan on the core are shipped.
+  reaction, the ambient-time scan on the core, and the facade reactions
+  (kernel-exclusion and re-exports-only) are shipped.
 
 ## Workspace Composition
 
@@ -126,6 +127,20 @@ proposal.
   now the facade doctest; the core-crate composition stays proven by `pacta-driver`'s
   unit tests. Reintroducing a runnable `examples/` playground later is an option if a
   richer, non-duplicative example earns its keep; not decided here.
+- The OpenSpec change archive was dissolved. `openspec/changes/archive/` held a frozen
+  copy of each synced delta spec plus deliberation git already retains, so it was
+  redundant against git + `openspec/specs/` + this file. The lifecycle is now
+  `explore -> propose -> apply -> sync`, where sync promotes delta specs into
+  `openspec/specs/` and removes the change directory — no archive. Recorded here rather
+  than in a decision-record file (see below).
+- Architecture-decision-record files were retired in favor of git-as-provenance. The
+  `docs/adr/` records had duplicated decisions already carried by the living docs
+  (`AGENTS.md`, `PROJECT.md`, the specs) and by git — the same redundancy that retired
+  the change archive, plus the supersession-note maintenance tax of a second copy.
+  Decision rationale now lives in git commit bodies and pull requests; reconsiderations
+  live here; the living docs are the single source of truth for current state. Adopting
+  a separate decision-record class again is an option if in-tree browsable provenance is
+  later judged worth the duplication; not decided here.
 
 ## Explicitly Deferred
 

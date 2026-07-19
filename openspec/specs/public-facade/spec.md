@@ -1,7 +1,7 @@
 # public-facade Specification
 
 ## Purpose
-TBD - created by archiving change establish-pacta-facade. Update Purpose after archive.
+Define the curated `pacta` facade as the workspace's single compose-level public entrypoint: a pure re-export crate that excludes the sans-I/O kernel and proves end-to-end lifecycle composition with a crate-root doctest, all enforced by executable governance.
 ## Requirements
 ### Requirement: Curated Public Entrypoint
 Pacta SHALL provide a single facade crate `pacta` that is the curated public
