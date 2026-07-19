@@ -51,9 +51,9 @@ dependencies = [
 
 [[package]]
 name = "guibiao"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2f1ec5b00006fbd2e5ee302cb1a3a88d22537c0429a1e63a1beb6e1218cb046"
+checksum = "bbce4bdae5649b931643c884a19a2732a1a6565b819f6f18fb5fc88c59c1b857"
 dependencies = [
  "serde_json",
  "xingbiao",
@@ -62,9 +62,9 @@ dependencies = [
 
 [[package]]
 name = "hunyi"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4f09d37a7a0e2ae0ac1efce61553362f9ccfb4453a869b97411684e00f38a96"
+checksum = "6ce340a6f9e2a9a7b904bd139d9e8b254c4b7dbfff5759efb69232e67fc9809b"
 dependencies = [
  "serde_json",
  "syn",
@@ -97,9 +97,9 @@ checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
 name = "louke"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c31977d28ca2e37b1d6c9e2fe2597a261e36d1a74b4cf3a2787641749c1e1255"
+checksum = "308fad2925d998d6b5aa00f9297f89bfbc5e9183334a60f667c213ca26098198"
 dependencies = [
  "xuanji",
 ]
@@ -272,9 +272,9 @@ dependencies = [
 
 [[package]]
 name = "tianheng"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4059a177c138ea33aa11bb6a9feb17d3bda31bb393e88c78011fb44a17611906"
+checksum = "63f661fd2b27d20dfbf6e25f8396eec66d7db7fa589f0ddc5785312f4591fdac"
 dependencies = [
  "guibiao",
  "hunyi",
@@ -347,18 +347,18 @@ dependencies = [
 
 [[package]]
 name = "xingbiao"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6bc55bea463a7b5adbd5e1d51d8f89fdc19503edb02d77c94b77306a841a9d7"
+checksum = "90b501d18c0b188229f6df997cfb54e5791166af94cae34b9e8e2800b51f3f8e"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "xuanji"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "280eaad36940d956f02cd6239285b2de14094125cf343fc5197b79be316c65dd"
+checksum = "8dd521d947a26342dc854273959f816d0fb663b752dbc517e918f63c496536a7"
 dependencies = [
  "serde_json",
 ]
