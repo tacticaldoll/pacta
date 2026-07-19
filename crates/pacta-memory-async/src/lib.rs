@@ -21,7 +21,6 @@
 
 use std::sync::Mutex;
 
-use async_trait::async_trait;
 use pacta_contract::lifecycle::{self, State};
 use pacta_contract::{Claim, Pact, Retainer, Timestamp};
 use pacta_contract_async::{AsyncRegistry, Transition};
@@ -70,7 +69,6 @@ impl MemoryRegistryAsync {
     }
 }
 
-#[async_trait]
 impl AsyncRegistry for MemoryRegistryAsync {
     type Error = NotHeld;
 

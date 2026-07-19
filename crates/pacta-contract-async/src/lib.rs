@@ -56,6 +56,10 @@
 //!   constant.
 //! - **Runtime-owned heartbeat cadence.** Long work must [`heartbeat`](AsyncRegistry::heartbeat)
 //!   before its lease lapses; when and how often is the runtime's policy.
+//! - **Runtime and its coloring are yours.** This binding is deliberately `Send`-agnostic: it forces
+//!   no `Send` bound on its futures and pulls no runtime. Async, `Send`, and executor choice are the
+//!   consumer's to compose — a multi-threaded executor requires `Send`, which the consumer satisfies
+//!   at its own call site over a concrete backend. The contract carries no runtime property.
 //!
 //! Note the fence rule this binding inherits from the frozen contract: a holder whose lease has
 //! lapsed but whose pact **no one has reclaimed** can still settle (its retainer is still the
@@ -63,10 +67,15 @@
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+// The async binding is deliberately `Send`-agnostic: the runtime is the consumer's, so its futures
+// carry no `Send` bound and a consumer composes `Send` at its concrete call site, where its executor
+// needs it. Native `async fn` in traits (AFIT) is what expresses that — `#[async_trait]` would force
+// `Box<dyn Future + Send>`, i.e. pacta dictating a runtime property. This `allow` is that design
+// declaration, not a workaround.
+#![allow(async_fn_in_trait)]
 
 use core::future::Future;
 
-use async_trait::async_trait;
 use pacta_contract::lifecycle::{self, State};
 use pacta_contract::{Claim, Retainer, Timestamp};
 
@@ -80,7 +89,6 @@ pub use pacta_contract::Transition;
 /// Backends implement the two primitives ([`claim`](Self::claim), [`apply`](Self::apply)) and the
 /// [`lease_millis`](Self::lease_millis) accessor; the four transition operations are provided as
 /// default methods composing over [`pacta_contract::lifecycle`] through [`apply`](Self::apply).
-#[async_trait]
 pub trait AsyncRegistry: Send + Sync {
     /// Error returned by the backend. It must be able to represent a lost/absent authority, so
     /// the shared kernel's [`lifecycle::NotCurrentHolder`] converts into it.
@@ -232,7 +240,6 @@ mod tests {
         }
     }
 
-    #[async_trait]
     impl AsyncRegistry for MemAsync {
         type Error = NotHeld;
 

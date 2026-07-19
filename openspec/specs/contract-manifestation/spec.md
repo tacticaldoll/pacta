@@ -9,12 +9,14 @@ the `pacta` facade, so a consumer who reads only the published crate sees both h
 of the contract without reading internal specs. The projection SHALL state the
 implementer half (what a `Registry` must satisfy) and the user-obligation half (what
 the consumer owes), and SHALL NOT re-specify behavior — it references the governed
-truth. The **async binding** SHALL likewise manifest both halves on its own surface
-(`pacta-contract-async`), including the obligations specific to it: the implementer
-half SHALL state that `apply` must apply the kernel decision within one atomic scope
-(or exactly-once and fencing break) and that `claim` must honor the eligibility
-invariant as a native, full-scan-free selection; the user-obligation half SHALL state
-the same reciprocal obligations as the sync facade.
+truth. The **async binding** SHALL likewise manifest both halves on its own surface,
+including the obligations specific to it: the implementer half SHALL state that `apply`
+must apply the kernel decision within one atomic scope (or exactly-once and fencing
+break) and that `claim` must honor the eligibility invariant as a native, full-scan-free
+selection; the user-obligation half SHALL state the same reciprocal obligations as the
+sync facade, and SHALL additionally state that the runtime and its coloring (async,
+`Send`, executor choice) are the consumer's to compose — the async binding does not force
+a runtime property.
 
 #### Scenario: The facade documents the implementer half
 - **WHEN** a consumer reads the `pacta` crate-root documentation
@@ -25,12 +27,12 @@ the same reciprocal obligations as the sync facade.
 - **THEN** it states the consumer's reciprocal obligations: an idempotent `Executor` (because recovery is at-least-once, not exactly-once), user-owned lease sizing, and runtime-owned heartbeat cadence
 
 #### Scenario: The async binding documents its implementer half
-- **WHEN** a consumer reads the `pacta-contract-async` documentation
+- **WHEN** a consumer reads the async binding's documentation
 - **THEN** it states that a backend implements the selection and the `apply` transition port, that `apply` must apply the kernel decision within one atomic scope (or exactly-once and fencing break), and that `claim` must honor the eligibility invariant as a native, full-scan-free selection
 
 #### Scenario: The async binding documents its user-obligation half
-- **WHEN** a consumer reads the `pacta-contract-async` documentation
-- **THEN** it states the reciprocal obligations: idempotent work because recovery is at-least-once, user-owned lease sizing, and runtime-owned heartbeat cadence
+- **WHEN** a consumer reads the async binding's documentation
+- **THEN** it states the reciprocal obligations: idempotent work because recovery is at-least-once, user-owned lease sizing, and runtime-owned heartbeat cadence, and that the runtime and its coloring (async, `Send`, executor choice) are the consumer's — the binding forces no runtime property
 
 ### Requirement: Reference Pieces Are Named As Reference
 Pacta SHALL name its reference implementations as reference on their own documented
