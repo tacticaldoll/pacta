@@ -104,19 +104,23 @@ binding dependency and no async runtime.
 - **THEN** the build pulls neither the async binding crate nor an async runtime
 
 ### Requirement: Conformance Covers Concurrent Transition Contention
-The conformance suite SHALL verify, for the async binding, that concurrent transitions contending on
-a single claimed pact preserve the at-most-once application guaranteed by the set-if-unchanged fence —
-the race surface the async binding's `load`-then-`cas` decomposition introduces and the sync fat-verb
-shape does not have. This SHALL be demonstrated against the reference async backend under genuine
-multi-threaded parallelism.
+The conformance suite SHALL verify that concurrent transitions contending on a single claimed pact
+preserve at-most-once application — the invariant every backend's `apply` must uphold regardless of
+whether it is implemented with a lock, a transaction, or compare-and-set. The suite SHALL assert the
+outcome through the `apply` transition port without assuming a particular concurrency-control
+mechanism. This SHALL be demonstrated under genuine multi-threaded parallelism against a reference
+backend.
 
 #### Scenario: Contending transitions apply at most once
 - **WHEN** two workers concurrently attempt a transition on the same claimed pact
-- **THEN** exactly one set-if-unchanged succeeds and the other reloads to a not-current-holder, so the
-  transition is applied at most once
+- **THEN** exactly one transition succeeds and the other resolves to a not-current-holder, so the transition is applied at most once
+
+#### Scenario: The invariant is backend-mechanism-agnostic
+- **WHEN** the concurrent-contention scenario runs against a backend
+- **THEN** it asserts the at-most-once outcome through the `apply` port, not by inspecting whether the backend used a lock, a transaction, or compare-and-set
 
 #### Scenario: The contention is exercised under real parallelism
 - **WHEN** the concurrent contention scenario runs
-- **THEN** it runs under genuine multi-threaded parallelism, because the reference backend's ready
+- **THEN** it runs under genuine multi-threaded parallelism, because a reference backend's ready
   futures do not interleave on a single-threaded executor
 

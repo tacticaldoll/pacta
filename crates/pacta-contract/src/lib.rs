@@ -367,6 +367,15 @@ pub mod lifecycle {
     }
 }
 
+/// A pure kernel transition decision — a [`lifecycle`] `on_X` — passed to the transition port
+/// [`Registry::apply`] (and its async twin). It is `Send + Sync` so the async binding's `apply`
+/// future stays `Send` across `.await`; the same type is used by both bindings, so the port is
+/// literally one shape.
+pub type Transition<'a> = dyn Fn(&lifecycle::State) -> Result<lifecycle::State, lifecycle::NotCurrentHolder>
+    + Send
+    + Sync
+    + 'a;
+
 /// The Registry manages the lifecycle of Pacts. It is a pure state machine.
 ///
 /// Time is injected: [`claim`](Registry::claim) and
@@ -383,18 +392,47 @@ pub trait Registry: Send + Sync {
     /// Reclaiming rotates the retainer, so the prior holder can no longer settle.
     fn claim(&self, dockets: &[&str], now: Timestamp) -> Result<Option<Claim>, Self::Error>;
 
+    /// The backend's lease duration in milliseconds, used by [`heartbeat`](Registry::heartbeat)
+    /// to compute the extended lease. Lease sizing is the backend's; the contract supplies the
+    /// mechanism, not a constant.
+    fn lease_millis(&self) -> u64;
+
+    /// Apply a lifecycle transition to the pact held by `retainer`, within the backend's own
+    /// atomic scope. `transition` is the pure kernel decision (a [`lifecycle`] `on_X`): the
+    /// backend loads the held state, computes the next state through `transition`, and applies
+    /// it atomically — it never decides the transition itself, so the lifecycle semantics stay
+    /// single-sourced in the kernel and cannot drift. A transition applied against a pact the
+    /// retainer no longer holds resolves to a not-current-holder error (the kernel's
+    /// [`NotCurrentHolder`](lifecycle::NotCurrentHolder) surfaces through `transition`). This is
+    /// the one transition port; the four transition operations below are provided over it.
+    ///
+    /// The backend owns *how* the scope is made atomic (a lock, a transaction, a native
+    /// conditional write, or compare-and-set); the contract mandates no concurrency-control
+    /// mechanism.
+    fn apply(&self, retainer: &Retainer, transition: &Transition<'_>) -> Result<(), Self::Error>;
+
     /// Extend the retainer's lease using `now`. A heartbeat presented after the
     /// lease already expired is rejected: the holder must claim again rather than
     /// revive a lapsed lease, so two holders never both hold settlement authority.
-    fn heartbeat(&self, retainer: &Retainer, now: Timestamp) -> Result<(), Self::Error>;
+    fn heartbeat(&self, retainer: &Retainer, now: Timestamp) -> Result<(), Self::Error> {
+        let lease = self.lease_millis();
+        self.apply(retainer, &|state| {
+            lifecycle::on_heartbeat(state, retainer, now, lease)
+        })
+    }
 
     /// Mark the pact as successfully fulfilled. Rejected when the retainer is not
     /// the current holder.
-    fn fulfill(&self, retainer: &Retainer) -> Result<(), Self::Error>;
+    fn fulfill(&self, retainer: &Retainer) -> Result<(), Self::Error> {
+        self.apply(retainer, &|state| lifecycle::on_settle(state, retainer))
+    }
 
     /// Mark the pact as breached. Rejected when the retainer is not the current
-    /// holder.
-    fn breach(&self, retainer: &Retainer) -> Result<(), Self::Error>;
+    /// holder. Shares the settlement transition with [`fulfill`](Registry::fulfill) — the
+    /// lifecycle records that the obligation concluded, not which outcome concluded it.
+    fn breach(&self, retainer: &Retainer) -> Result<(), Self::Error> {
+        self.apply(retainer, &|state| lifecycle::on_settle(state, retainer))
+    }
 
     /// Release the claim without concluding the obligation, making the pact
     /// reclaimable again only at or after `reclaimable_at`.
@@ -408,7 +446,11 @@ pub trait Registry: Send + Sync {
     /// claimable, as a voluntary lapse. Release rotates authority like a lapse, so the
     /// prior retainer can no longer settle or heartbeat. Rejected when the retainer is
     /// not the current holder.
-    fn release(&self, retainer: &Retainer, reclaimable_at: Timestamp) -> Result<(), Self::Error>;
+    fn release(&self, retainer: &Retainer, reclaimable_at: Timestamp) -> Result<(), Self::Error> {
+        self.apply(retainer, &|state| {
+            lifecycle::on_release(state, retainer, reclaimable_at)
+        })
+    }
 }
 
 /// The sans-I/O lifecycle kernel.

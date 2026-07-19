@@ -16,7 +16,7 @@
 use std::sync::Mutex;
 
 use pacta_contract::lifecycle::{self, State};
-use pacta_contract::{Claim, Pact, Registry, Retainer, Timestamp};
+use pacta_contract::{Claim, Pact, Registry, Retainer, Timestamp, Transition};
 use uuid::Uuid;
 
 /// The error a memory registry returns when a retainer is not the current holder,
@@ -67,28 +67,6 @@ impl MemoryRegistry {
             lease_millis,
         }
     }
-
-    /// Apply a lifecycle transition to the one record its current holder owns: the
-    /// first record for which the transition succeeds is updated. If none succeed, no
-    /// record is held by that retainer (stale, settled, or lapsed) — `NotHeld`. The
-    /// authority check lives in the `lifecycle` kernel, not here; this only scans
-    /// storage and writes the new state.
-    fn apply_transition(
-        &self,
-        transition: impl Fn(&State) -> Result<State, lifecycle::NotCurrentHolder>,
-    ) -> Result<(), NotHeld> {
-        let mut records = self
-            .records
-            .lock()
-            .expect("registry mutex should not be poisoned");
-        for record in records.iter_mut() {
-            if let Ok(next) = transition(&record.state) {
-                record.state = next;
-                return Ok(());
-            }
-        }
-        Err(NotHeld)
-    }
 }
 
 impl Registry for MemoryRegistry {
@@ -120,23 +98,28 @@ impl Registry for MemoryRegistry {
         )))
     }
 
-    fn heartbeat(&self, retainer: &Retainer, now: Timestamp) -> Result<(), Self::Error> {
-        self.apply_transition(|state| {
-            lifecycle::on_heartbeat(state, retainer, now, self.lease_millis)
-        })
+    fn lease_millis(&self) -> u64 {
+        self.lease_millis
     }
 
-    fn fulfill(&self, retainer: &Retainer) -> Result<(), Self::Error> {
-        // fulfill and breach share the same lifecycle transition: the pact concludes.
-        self.apply_transition(|state| lifecycle::on_settle(state, retainer))
-    }
-
-    fn breach(&self, retainer: &Retainer) -> Result<(), Self::Error> {
-        self.apply_transition(|state| lifecycle::on_settle(state, retainer))
-    }
-
-    fn release(&self, retainer: &Retainer, reclaimable_at: Timestamp) -> Result<(), Self::Error> {
-        self.apply_transition(|state| lifecycle::on_release(state, retainer, reclaimable_at))
+    /// Apply a lifecycle transition to the one record its current holder owns, within a
+    /// single `Mutex` scope. The `transition` carries the authority check — it fails on any
+    /// state the retainer does not hold — so scanning for the first record it accepts locates
+    /// the held pact; a durable backend would instead load by `retainer`, and the in-memory
+    /// scan is equivalent. The atomic scope here is one lock hold: load, decide, and store
+    /// happen without releasing it, so there is no load-then-store race.
+    fn apply(&self, _retainer: &Retainer, transition: &Transition<'_>) -> Result<(), Self::Error> {
+        let mut records = self
+            .records
+            .lock()
+            .expect("registry mutex should not be poisoned");
+        for record in records.iter_mut() {
+            if let Ok(next) = transition(&record.state) {
+                record.state = next;
+                return Ok(());
+            }
+        }
+        Err(NotHeld)
     }
 }
 
