@@ -58,21 +58,22 @@ rejects the prior holder's authority.
 - **THEN** the in-window heartbeat extends the lease and the post-expiry heartbeat
   is rejected
 
-### Requirement: Conformance Covers Deferred Re-Arm
-The conformance suite SHALL verify release and deferred re-arm for any backend: that a released
-pact is not claimable before its re-arm instant, is claimable at or after it, that immediate
-re-arm behaves as a lapse, and that release rotates authority away from the prior retainer.
+### Requirement: Conformance Covers Deferred Reclaim
+The conformance suite SHALL verify release and deferred reclaim for any backend: that a
+released pact is not claimable before its reclaimable instant, is claimable at or after it,
+that an immediate reclaimable instant behaves as a lapse, and that release rotates authority
+away from the prior retainer.
 
-#### Scenario: A released pact is withheld until its re-arm instant
-- **WHEN** the suite releases a claim with a future re-arm instant and claims again before it
+#### Scenario: A released pact is withheld until its reclaimable instant
+- **WHEN** the suite releases a claim with a future reclaimable instant and claims again before it
 - **THEN** the claim returns nothing
 
-#### Scenario: A released pact is reclaimable at its re-arm instant
-- **WHEN** the suite claims again at or after the re-arm instant
+#### Scenario: A released pact is reclaimable at its instant
+- **WHEN** the suite claims again at or after the reclaimable instant
 - **THEN** the pact is reclaimed through the normal claim path
 
-#### Scenario: Immediate re-arm reclaims like a lapse
-- **WHEN** the suite releases a claim with a re-arm instant at or before now and claims again
+#### Scenario: An immediate reclaimable instant reclaims like a lapse
+- **WHEN** the suite releases a claim with a reclaimable instant at or before now and claims again
 - **THEN** the pact is reclaimed through the normal claim path
 
 #### Scenario: Release rotates authority away from the prior holder

@@ -37,9 +37,9 @@ enum State {
         retainer: Uuid,
         expiry: Timestamp,
     },
-    /// Released, non-terminal: claimable again only at or after `rearm_at`.
+    /// Released, non-terminal: claimable again only at or after `reclaimable_at`.
     Deferred {
-        rearm_at: Timestamp,
+        reclaimable_at: Timestamp,
     },
     Settled,
 }
@@ -103,8 +103,8 @@ impl Registry for MemoryRegistry {
                 State::Available => true,
                 // A lapse: an expired hold is reclaimable through this claim path.
                 State::Held { expiry, .. } => expiry < now,
-                // A re-arm: a released pact is claimable once its instant has passed.
-                State::Deferred { rearm_at } => rearm_at <= now,
+                // A reclaim: a released pact is claimable once its instant has passed.
+                State::Deferred { reclaimable_at } => reclaimable_at <= now,
                 State::Settled => false,
             }
         });
@@ -154,7 +154,7 @@ impl Registry for MemoryRegistry {
         self.settle(retainer)
     }
 
-    fn release(&self, retainer: &Retainer, rearm_at: Timestamp) -> Result<(), Self::Error> {
+    fn release(&self, retainer: &Retainer, reclaimable_at: Timestamp) -> Result<(), Self::Error> {
         let mut records = self
             .records
             .lock()
@@ -164,8 +164,9 @@ impl Registry for MemoryRegistry {
         // the same authority check as fulfill and breach.
         let index = Self::find_holder(&mut records, retainer).ok_or(NotHeld)?;
         // Non-terminal: drop the hold (rotating authority away from this retainer) and
-        // re-arm. The core honors the injected instant; it computes no delay.
-        records[index].state = State::Deferred { rearm_at };
+        // set the reclaimable instant. The core honors the injected instant; it computes
+        // no delay.
+        records[index].state = State::Deferred { reclaimable_at };
         Ok(())
     }
 }
