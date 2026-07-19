@@ -56,6 +56,10 @@ where
     late_fulfill_before_reclaim_succeeds(&make);
     fulfill_settles_and_pact_not_claimable(&make);
     breach_settles_terminally(&make);
+    released_pact_withheld_until_rearm(&make);
+    released_pact_reclaimable_at_rearm(&make);
+    immediate_rearm_reclaims_like_lapse(&make);
+    release_rotates_authority_from_prior_holder(&make);
     heartbeat_extends_lease_preventing_lapse(&make);
     heartbeat_on_lapsed_lease_rejected(&make);
     heartbeat_unknown_retainer_rejected(&make);
@@ -255,6 +259,99 @@ where
             .expect("claim should not error")
             .is_none(),
         "a breached pact must not be claimable, even after its lease would have expired"
+    );
+}
+
+fn released_pact_withheld_until_rearm<R, F>(make: &F)
+where
+    R: Registry,
+    R::Error: Debug,
+    F: Fn(Vec<Pact>, u64) -> R,
+{
+    let registry = make(vec![a_pact()], LEASE_MILLIS);
+    let claim = registry
+        .claim(&[DOCKET], at(0))
+        .expect("claim should not error")
+        .expect("a pact should be claimable");
+    registry
+        .release(&claim.retainer, at(5000))
+        .expect("release should succeed for the current holder");
+    // at(3000) is past the original lease (1000) — a lapse would make it claimable —
+    // but the re-arm instant (5000) is later, so release must withhold it.
+    assert!(
+        registry
+            .claim(&[DOCKET], at(3000))
+            .expect("claim should not error")
+            .is_none(),
+        "a released pact must not be claimable before its re-arm instant"
+    );
+}
+
+fn released_pact_reclaimable_at_rearm<R, F>(make: &F)
+where
+    R: Registry,
+    R::Error: Debug,
+    F: Fn(Vec<Pact>, u64) -> R,
+{
+    let registry = make(vec![a_pact()], LEASE_MILLIS);
+    let first = registry
+        .claim(&[DOCKET], at(0))
+        .expect("claim should not error")
+        .expect("a pact should be claimable");
+    registry
+        .release(&first.retainer, at(5000))
+        .expect("release should succeed");
+    let second = registry
+        .claim(&[DOCKET], at(5000))
+        .expect("claim should not error")
+        .expect("a released pact must be claimable at its re-arm instant");
+    assert_ne!(
+        first.retainer.id(),
+        second.retainer.id(),
+        "reclaiming a released pact must rotate the retainer"
+    );
+}
+
+fn immediate_rearm_reclaims_like_lapse<R, F>(make: &F)
+where
+    R: Registry,
+    R::Error: Debug,
+    F: Fn(Vec<Pact>, u64) -> R,
+{
+    let registry = make(vec![a_pact()], LEASE_MILLIS);
+    let claim = registry
+        .claim(&[DOCKET], at(0))
+        .expect("claim should not error")
+        .expect("a pact should be claimable");
+    registry
+        .release(&claim.retainer, at(0))
+        .expect("release with an immediate re-arm should succeed");
+    assert!(
+        registry
+            .claim(&[DOCKET], at(0))
+            .expect("claim should not error")
+            .is_some(),
+        "an immediate re-arm must make the pact claimable at once, as a voluntary lapse"
+    );
+}
+
+fn release_rotates_authority_from_prior_holder<R, F>(make: &F)
+where
+    R: Registry,
+    R::Error: Debug,
+    F: Fn(Vec<Pact>, u64) -> R,
+{
+    let registry = make(vec![a_pact()], LEASE_MILLIS);
+    let claim = registry
+        .claim(&[DOCKET], at(0))
+        .expect("claim should not error")
+        .expect("a pact should be claimable");
+    registry
+        .release(&claim.retainer, at(0))
+        .expect("release should succeed");
+    assert!(
+        registry.fulfill(&claim.retainer).is_err(),
+        "the prior holder must not settle after releasing (release rotates authority)"
     );
 }
 

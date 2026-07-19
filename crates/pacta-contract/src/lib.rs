@@ -170,6 +170,20 @@ pub trait Registry: Send + Sync {
     /// Mark the pact as breached. Rejected when the retainer is not the current
     /// holder.
     fn breach(&self, retainer: &Retainer) -> Result<(), Self::Error>;
+
+    /// Release the claim without concluding the obligation, re-arming the pact to be
+    /// claimable again only at or after `rearm_at`.
+    ///
+    /// This is **non-terminal**: unlike [`fulfill`](Registry::fulfill) and
+    /// [`breach`](Registry::breach), it settles nothing — the pact is left to be
+    /// attempted again. The registry computes no delay: `rearm_at` is a
+    /// consumer-supplied instant, honored exactly as the injected `now` is honored
+    /// (compared, never computed), so backoff policy stays with the caller and `Pact`
+    /// carries no delay. A `rearm_at` at or before now makes the pact immediately
+    /// claimable, as a voluntary lapse. Release rotates authority like a lapse, so the
+    /// prior retainer can no longer settle or heartbeat. Rejected when the retainer is
+    /// not the current holder.
+    fn release(&self, retainer: &Retainer, rearm_at: Timestamp) -> Result<(), Self::Error>;
 }
 
 /// The sans-I/O lifecycle kernel.

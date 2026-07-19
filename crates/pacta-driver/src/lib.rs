@@ -262,6 +262,10 @@ mod tests {
                 .breached += 1;
             Ok(())
         }
+
+        fn release(&self, _retainer: &Retainer, _rearm_at: Timestamp) -> Result<(), Self::Error> {
+            Ok(())
+        }
     }
 
     struct TestExecutor {
