@@ -1,9 +1,9 @@
-//! The pure, zero-dependency contract for Pacta.
+//! The isolated core contract for Pacta.
 //!
 //! Pacta operates on three axioms:
 //! 1. Registry is Lifecycle (no business logic, no retry/delay logic).
 //! 2. Execution is Middleware.
-//! 3. This contract is zero-dependency.
+//! 3. This contract has no dependency on other workspace crates.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
