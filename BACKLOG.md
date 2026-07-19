@@ -88,7 +88,7 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
 
 - Durable `Registry` backends such as SQLite or Postgres, living outside the
   workspace and proving themselves against `pacta-conformance`.
-- An async `Registry` variant, once an async backend forces it.
+- An async `Registry` variant — **forced, and now decided** (see below).
   - **Forced now (2026-07, dogfood finding from worklane).** worklane — a real
     durable, multi-backend (SQLite/Postgres/Redis), concurrent, shipping queue —
     adopted the `Registry` shape and immediately hit the wall: its backends do
@@ -104,6 +104,79 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
     worklane will keep this shape in its own async port; when pacta ships an async
     `Registry` matching it, worklane can depend on pacta's trait directly, closing
     the loop.
+  - **Semantics validated on a real durable backend (2026-07).** Beyond the async
+    wall, the port also confirmed the *semantics* are complete and portable: on a
+    real SQLite backend, retry and defer both delegate to one `release`-shaped op,
+    the attempts-increment living cleanly backend-side — reinforcing the
+    claim-authority triage (counting is backend, not contract). So the only gap the
+    port surfaced is the async *shape*, not any missing semantics.
+  - **Decided (2026-07-15): deliver the async binding as a second binding of the
+    frozen contract.** By the claim-authority test this is not new semantics — the
+    claim authority behaves identically — so it is a second *binding* of the frozen
+    op set, not a contract expansion (zero semantic risk; the semantics are frozen
+    and dogfood-proven). Positioning: sans-I/O purity lives in a **colorless Kernel
+    + conformance**, not in the calling convention; `Registry` is an I/O **port**
+    with sync and async bindings; the two bindings differ only in async color, with
+    semantics single-sourced. I/O is invisible in both bindings' types (Rust has no
+    I/O effect); async merely carries the runtime-coupling color.
+  - **Landing shape (sans-I/O decomposition):**
+    - **Colorless Kernel** holds *all* lifecycle semantics (eligibility invariant,
+      lease/retainer, `reclaimable_at`, transition state machines). Lifted out of
+      `pacta-memory` into `pacta-contract` as additive **syn-free** pure functions;
+      the sync impl is refactored to call it (behavior-preserving). "Frozen" = the
+      five-op public surface is frozen, not that the crate never takes an additive
+      minor.
+    - **Two colored port primitives**, split by op shape (not one fat port):
+      ① `cas(by_retainer, expect, new)` — truly semantics-free, cannot drift;
+      ② `claim_select(dockets, now)` — carries the fixed eligibility invariant,
+      re-expressed **natively per backend** (a full-scan-free selection, e.g. SQL
+      `SKIP LOCKED`), so it is a *translation* (conformance-caught), and the only
+      unproven risk lives here.
+    - **Async trait = 2 required primitives + 5 Kernel-driven default methods**
+      (claim/heartbeat/fulfill/breach/release): callers see the faithful five-op
+      contract; backends implement only the two primitives. The frozen **sync**
+      trait keeps its five fat required methods unchanged.
+    - **Ordering/priority is edge policy** (the consumer's, single-sourced in the
+      consumer), never a pacta spec parameter — so eligibility-as-data cannot grow
+      into a query DSL. Eligibility stays a fixed invariant baked into the contract.
+  - **Crate topology** (forced by feature-unification leak + version-cadence
+    isolation — a shared `async` feature would leak the async proc-macro/`syn` into
+    sync-only consumers of `pacta-contract`, destroying its thin syn-free footprint):
+    new **`pacta-contract-async`** (async ports, deps `pacta-contract`), new
+    **`pacta-memory-async`** (async reference backend), and `pacta-conformance`
+    gains an **async runner** over the single-source scenario data. `#[async_trait]`
+    vs native AFIT is an internal detail of `pacta-contract-async` (must yield
+    `Send` futures for tokio).
+  - **Scope guard:** do **not** add create / breach-reason / by-id classify to any
+    trait (the claim-authority triage above declined all three; async does not
+    change that). No async `Executor`/`Driver` (no consumer forces pacta's reference
+    async runtime; the consumer has its own loop).
+  - **Plan (spike-first, to surface the ② risk before building the pipeline):**
+    1. **② throughput spike** (throwaway): reshape the consumer's existing async
+       `SKIP LOCKED` reserve into the `claim_select(dockets, now)` single-primitive
+       shape; bench concurrency vs the original. Gate: throughput within bound and
+       zero-retry preserved — else the ② shape is wrong, stop and redesign.
+    2. **Kernel lift** into `pacta-contract` (additive, syn-free); sync impl calls
+       it. Gate: sync `pacta-conformance` green + `pacta-contract` still syn-free +
+       guibiao/hunyi green. (Parallel with 1.)
+    3. **`pacta-contract-async`** `AsyncRegistry` = 2 primitives + 5 Kernel defaults.
+       Gate: trivial 2-primitive impl yields the 5 ops via defaults; Kernel subtree
+       no pub `async fn`.
+    4. **`pacta-memory-async` + async conformance runner** over the same scenarios.
+       Gate: the scenario set the sync runner passes also passes async — faithful,
+       zero scenario duplication.
+    5. **Consumer rebind** onto `pacta-contract-async` (native `claim_select`,
+       mirror-port dropped) + louke post-verify half-guard (selected row re-checked
+       against `Kernel.is_eligible`). Gate: consumer's full conformance stays green;
+       injected ineligible selection is rejected.
+    6. **Concurrency/throughput gate** on the rebound native `claim_select` per
+       backend — the ② de-risk exit (functional-green ≠ hot-path-safe).
+    7. **hunyi/louke/guibiao wiring** (Kernel no pub `async fn`; facade leaks no
+       `pacta_*`; allowlist forbids executor/driver/memory in prod; reserve
+       mutual-exclusion runtime asserts) — each proven by a reaction test.
+  - **Status: warranted but not urgent** (the consumer is unblocked via its own
+    mirror-port). Decided and planned; **not yet an active change** — open the change
+    (and the step-1 spike may run independently) when pacta work is scheduled.
 
 Surface: lifecycle persistence.
 
@@ -237,7 +310,9 @@ proposal.
 - Broad broker behavior.
 - Exactly-once delivery as a core guarantee.
 - Backend-specific business policy in the lifecycle kernel.
-- An async `Registry`, deferred until an async backend forces it.
+- ~~An async `Registry`, deferred until an async backend forces it.~~ **Forced and
+  decided** (2026-07-15) — see Durable Backends: deliver as a second binding of the
+  frozen contract (colorless Kernel + colored ports), spike-first plan, not urgent.
 - Durable backends inside the workspace; they live outside it (see Workspace
   Composition).
 - A public pact-ingress API that turns a Signal into a stored `Pact`.
