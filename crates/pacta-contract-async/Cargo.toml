@@ -11,8 +11,8 @@ readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 description = "Async binding of the Pacta Registry contract, composing over the shared lifecycle kernel."
-# Unpublished while the async surface evolves; flips to true when worklane's review (and the async
-# conformance runner) prove it stable enough to bind to crates.io semver.
+# Unpublished while the async surface stabilizes; flips to true on pacta's own bar — when the async
+# surface stabilizes and pacta-conformance covers the CAS-contention race — binding it to crates.io semver.
 publish = false
 
 [dependencies]

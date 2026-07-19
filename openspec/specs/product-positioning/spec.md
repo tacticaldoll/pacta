@@ -28,11 +28,19 @@ Pacta SHALL define elegance as engineering restraint: minimal lifecycle state, c
 - **THEN** it frames growth as thin, governed extension patterns rather than broad queue-runtime feature accumulation
 
 ### Requirement: Benchmark Stance
-Pacta SHALL use Worklane, Apalis, Tower, and lightweight background-job systems as calibration references without inheriting their architecture.
+Pacta SHALL use Worklane, Apalis, Tower, and lightweight background-job systems as calibration references without inheriting their architecture. Worklane in particular SHALL appear in active pacta prose only as origin context and a calibration reference, and SHALL NOT be recorded as a dependency, a forcing function, or a design constraint that gates pacta's decisions. A consumer may *ignite* pacta's work — surfacing a finding that pacta then re-states as its own property — but pacta's contract, release, and roadmap decisions SHALL stand on pacta's own authority, never deferred to a named external consumer's review or schedule.
 
 #### Scenario: Worklane is origin context
 - **WHEN** active project prose mentions Worklane
 - **THEN** it treats Worklane as origin context and a bloat warning rather than a blueprint to recreate
+
+#### Scenario: Worklane is not a design constraint
+- **WHEN** active project prose or manifest prose records a pacta decision (a contract shape, a publish or release gate, a roadmap item)
+- **THEN** the decision is stated on pacta's own authority and its criteria name no external consumer, so Worklane is never a dependency, forcing function, or gate on that decision
+
+#### Scenario: A consumer finding is distilled into a pacta property
+- **WHEN** a dogfooding consumer surfaces a finding pacta chooses to keep
+- **THEN** it is re-stated as a pacta-intrinsic property in pacta's own voice, without attributing the property to the external consumer as its author or owner
 
 #### Scenario: External projects are benchmarks
 - **WHEN** active project prose mentions external queue or middleware projects
