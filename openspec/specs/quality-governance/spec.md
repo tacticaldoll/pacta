@@ -259,6 +259,38 @@ forever behind a clean workspace.
 - **WHEN** the governance test suite runs
 - **THEN** it asserts that the static check reports a `must not call inline` violation for a fixture whose `pacta-contract` calls into each of `std::io`, `std::fs`, `std::net`, and `std::process`, so the proof distinguishes each reacting boundary from one that silently never fires
 
+### Requirement: Executor Orchestration-Vocabulary Reaction
+Pacta SHALL enforce by an executable reaction that `pacta-executor` exposes no orchestration or
+policy vocabulary as a public symbol, so the composition seam stays a blind mechanism and cannot
+accrete sibling-owned or non-goal policy under a public name. A reaction SHALL reject a public
+item of `pacta-executor` whose name denotes retry, timeout, backoff, circuit, quota, or
+rate-limit. The forbidden list SHALL be generic orchestration vocabulary drawn from the stated
+non-goals and SHALL name no sibling product, because sibling-blindness forbids the reaction from
+naming what it checks against. The reaction is acknowledged to be inherently partial — a line
+scan sees no macro-expanded item and skips `pub use` re-exports and `pub const` values — and so
+complements review rather than replacing it. The reaction SHALL be proven to fire, so a
+misconfigured or silently no-op boundary cannot pass forever.
+
+#### Scenario: A public orchestration-named symbol in the executor fails governance
+- **WHEN** `pacta-executor` exposes a public item whose name denotes retry, timeout, backoff,
+  circuit, quota, or rate-limit
+- **THEN** the governance reaction fails
+
+#### Scenario: The reaction names no sibling
+- **WHEN** the reaction is declared
+- **THEN** its forbidden list is generic orchestration vocabulary from the stated non-goals and
+  references no sibling product
+
+#### Scenario: The orchestration-vocabulary reaction is proven to fire
+- **WHEN** the governance test suite runs
+- **THEN** it asserts the reaction reports a violation for a fixture executor exposing such a
+  public symbol, and reports none for a matching fixture without it, so the proof distinguishes a
+  reacting boundary from one that always fires
+
+#### Scenario: The reaction runs in CI
+- **WHEN** a push or pull request runs CI
+- **THEN** the orchestration-vocabulary reaction runs as part of the governance check
+
 ### Requirement: Governance Fails Loudly On Unreadable Inputs
 The executable governance gate SHALL NOT let a file-scanning check pass vacuously
 when a governed input is missing or unreadable. A canonical governed file that
