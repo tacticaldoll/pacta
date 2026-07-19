@@ -9,7 +9,12 @@ the `pacta` facade, so a consumer who reads only the published crate sees both h
 of the contract without reading internal specs. The projection SHALL state the
 implementer half (what a `Registry` must satisfy) and the user-obligation half (what
 the consumer owes), and SHALL NOT re-specify behavior — it references the governed
-truth.
+truth. The **async binding** SHALL likewise manifest both halves on its own surface
+(`pacta-contract-async`), including the obligations specific to it: the implementer
+half SHALL state that `cas` must be atomic (or exactly-once and fencing break) and
+that `claim` must honor the eligibility invariant as a native, full-scan-free
+selection; the user-obligation half SHALL state the same reciprocal obligations as
+the sync facade.
 
 #### Scenario: The facade documents the implementer half
 - **WHEN** a consumer reads the `pacta` crate-root documentation
@@ -18,6 +23,14 @@ truth.
 #### Scenario: The facade documents the user-obligation half
 - **WHEN** a consumer reads the `pacta` crate-root documentation
 - **THEN** it states the consumer's reciprocal obligations: an idempotent `Executor` (because recovery is at-least-once, not exactly-once), user-owned lease sizing, and runtime-owned heartbeat cadence
+
+#### Scenario: The async binding documents its implementer half
+- **WHEN** a consumer reads the `pacta-contract-async` documentation
+- **THEN** it states that a backend implements the selection and load/cas transition port, that `cas` must be atomic (or exactly-once and fencing break), and that `claim` must honor the eligibility invariant as a native, full-scan-free selection
+
+#### Scenario: The async binding documents its user-obligation half
+- **WHEN** a consumer reads the `pacta-contract-async` documentation
+- **THEN** it states the reciprocal obligations: idempotent work because recovery is at-least-once, user-owned lease sizing, and runtime-owned heartbeat cadence
 
 ### Requirement: Reference Pieces Are Named As Reference
 Pacta SHALL name its reference implementations as reference on their own documented
