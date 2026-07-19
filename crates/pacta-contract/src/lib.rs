@@ -9,7 +9,11 @@
 #![warn(missing_docs)]
 
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+
+/// The identifier type the durable records and the fencing token are built on, re-exported from the
+/// [`uuid`] crate. A backend needs it to build a [`Pact`] (`Pact::new(id, …)`) and to mint a fresh
+/// [`Retainer`] (`Retainer::new(Uuid…)`), so it is part of the backend-author surface.
+pub use uuid::Uuid;
 
 /// A durable obligation, generated from a Signal, ready to be executed.
 /// Note the deliberate absence of `attempts`, `delay`, and `priority`.
