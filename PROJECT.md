@@ -23,7 +23,7 @@ The behavior that must be protected at all costs:
 
 ## Change Prioritization
 
-When comparing possible changes, prefer the one that protects the core contract earliest:
+When comparing possible changes, prefer the one that protects the core contract earliest. Future phases are defined in `BACKLOG.md`, but the prioritization rule is always:
 
 1. Correctness, data integrity, and strict adherence to the Three Axioms.
 2. Specified feature completeness for the Middleware ecosystem.
