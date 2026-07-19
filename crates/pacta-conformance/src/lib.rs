@@ -81,7 +81,7 @@ where
 mod async_runner {
     use core::future::Future;
 
-    use pacta_contract::{Claim, Pact, Registry, Retainer, Timestamp};
+    use pacta_contract::{Claim, Pact, Registry, Retainer, Timestamp, Transition};
     use pacta_contract_async::AsyncRegistry;
 
     /// Drive a future to completion on the current thread with a no-op waker. Correct for futures
@@ -99,8 +99,10 @@ mod async_runner {
         }
     }
 
-    /// Adapts an [`AsyncRegistry`] into the sync [`Registry`] by blocking on each operation, so the
-    /// async binding runs the sync suite verbatim.
+    /// Adapts an [`AsyncRegistry`] into the sync [`Registry`] by blocking on each primitive, so the
+    /// async binding runs the sync suite verbatim. Because both bindings share one transition port,
+    /// the adapter forwards only the primitives (`claim`, `lease_millis`, `apply`); the four
+    /// transition ops come from the sync trait's default methods over `apply`.
     struct BlockOn<R>(R);
 
     impl<R: AsyncRegistry> Registry for BlockOn<R> {
@@ -110,24 +112,16 @@ mod async_runner {
             block_on(self.0.claim(dockets, now))
         }
 
-        fn heartbeat(&self, retainer: &Retainer, now: Timestamp) -> Result<(), Self::Error> {
-            block_on(self.0.heartbeat(retainer, now))
+        fn lease_millis(&self) -> u64 {
+            self.0.lease_millis()
         }
 
-        fn fulfill(&self, retainer: &Retainer) -> Result<(), Self::Error> {
-            block_on(self.0.fulfill(retainer))
-        }
-
-        fn breach(&self, retainer: &Retainer) -> Result<(), Self::Error> {
-            block_on(self.0.breach(retainer))
-        }
-
-        fn release(
+        fn apply(
             &self,
             retainer: &Retainer,
-            reclaimable_at: Timestamp,
+            transition: &Transition<'_>,
         ) -> Result<(), Self::Error> {
-            block_on(self.0.release(retainer, reclaimable_at))
+            block_on(self.0.apply(retainer, transition))
         }
     }
 

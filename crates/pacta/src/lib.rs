@@ -63,17 +63,16 @@
 //! ```
 //! # use std::convert::Infallible;
 //! # use std::sync::Mutex;
-//! # use pacta::{Claim, Execution, Executor, Middleware, Outcome, Pact, Registry, Retainer, Timestamp};
+//! # use pacta::{Claim, Execution, Executor, Middleware, Outcome, Pact, Registry, Retainer, Timestamp, Transition};
 //! # struct Ledger { pending: Mutex<Option<Claim>> }
 //! # impl Registry for Ledger {
 //! #     type Error = Infallible;
 //! #     fn claim(&self, _d: &[&str], _n: Timestamp) -> Result<Option<Claim>, Infallible> {
 //! #         Ok(self.pending.lock().unwrap().take())
 //! #     }
-//! #     fn heartbeat(&self, _r: &Retainer, _n: Timestamp) -> Result<(), Infallible> { Ok(()) }
-//! #     fn fulfill(&self, _r: &Retainer) -> Result<(), Infallible> { Ok(()) }
-//! #     fn breach(&self, _r: &Retainer) -> Result<(), Infallible> { Ok(()) }
-//! #     fn release(&self, _r: &Retainer, _t: Timestamp) -> Result<(), Infallible> { Ok(()) }
+//! #     fn lease_millis(&self) -> u64 { 30_000 }
+//! #     // The one transition port; heartbeat/fulfill/breach/release come free as defaults.
+//! #     fn apply(&self, _r: &Retainer, _t: &Transition<'_>) -> Result<(), Infallible> { Ok(()) }
 //! # }
 //! # struct Performer;
 //! # impl Executor for Performer {
@@ -107,6 +106,8 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-pub use pacta_contract::{Claim, Outcome, Pact, Registry, Retainer, Settlement, Timestamp};
+pub use pacta_contract::{
+    Claim, Outcome, Pact, Registry, Retainer, Settlement, Timestamp, Transition,
+};
 pub use pacta_driver::{Driver, DriverError, Step};
 pub use pacta_executor::{Execution, Executor, Middleware};

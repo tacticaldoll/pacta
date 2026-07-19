@@ -11,10 +11,10 @@ implementer half (what a `Registry` must satisfy) and the user-obligation half (
 the consumer owes), and SHALL NOT re-specify behavior — it references the governed
 truth. The **async binding** SHALL likewise manifest both halves on its own surface
 (`pacta-contract-async`), including the obligations specific to it: the implementer
-half SHALL state that `cas` must be atomic (or exactly-once and fencing break) and
-that `claim` must honor the eligibility invariant as a native, full-scan-free
-selection; the user-obligation half SHALL state the same reciprocal obligations as
-the sync facade.
+half SHALL state that `apply` must apply the kernel decision within one atomic scope
+(or exactly-once and fencing break) and that `claim` must honor the eligibility
+invariant as a native, full-scan-free selection; the user-obligation half SHALL state
+the same reciprocal obligations as the sync facade.
 
 #### Scenario: The facade documents the implementer half
 - **WHEN** a consumer reads the `pacta` crate-root documentation
@@ -26,7 +26,7 @@ the sync facade.
 
 #### Scenario: The async binding documents its implementer half
 - **WHEN** a consumer reads the `pacta-contract-async` documentation
-- **THEN** it states that a backend implements the selection and load/cas transition port, that `cas` must be atomic (or exactly-once and fencing break), and that `claim` must honor the eligibility invariant as a native, full-scan-free selection
+- **THEN** it states that a backend implements the selection and the `apply` transition port, that `apply` must apply the kernel decision within one atomic scope (or exactly-once and fencing break), and that `claim` must honor the eligibility invariant as a native, full-scan-free selection
 
 #### Scenario: The async binding documents its user-obligation half
 - **WHEN** a consumer reads the `pacta-contract-async` documentation

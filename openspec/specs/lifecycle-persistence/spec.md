@@ -221,3 +221,28 @@ kernel.
 #### Scenario: Extraction preserves behavior
 - **WHEN** the reference backend is refactored to compose over the shared kernel
 - **THEN** it passes the identical `pacta-conformance` suite with no change to its observable behavior
+
+### Requirement: Backends Apply Transitions Through A Uniform Port
+Pacta SHALL express every lifecycle transition, in both the sync and async bindings, through one
+uniform port: a backend implements a native selection (`claim`) and a single `apply` operation that
+runs a pure kernel decision — a `Fn(&State) -> Result<State, NotCurrentHolder>`, i.e. a
+`lifecycle::on_X` — within the backend's own atomic scope, and inherits heartbeat, fulfill, breach,
+and release as default methods over `apply`. The backend SHALL own the concurrency-control
+mechanism (a lock, a transaction, a native conditional select, or compare-and-set); the contract
+SHALL NOT mandate one. Pacta SHALL offer an optional `apply_via_cas` helper that implements `apply`
+as a `load → decide → compare-and-set` retry loop, so a backend whose only atomic primitive is
+compare-and-set satisfies the port without re-writing the loop. The helper SHALL live with the
+binding it serves rather than in the colorless `lifecycle` kernel, so the kernel exposes no
+runtime coloring.
+
+#### Scenario: The decision is the kernel's, the atomicity is the backend's
+- **WHEN** a backend applies a lifecycle transition
+- **THEN** it passes the shared `lifecycle` decision to `apply` and wraps it in its own atomic scope, so the transition's outcome is single-sourced in the kernel while the concurrency-control mechanism stays the backend's
+
+#### Scenario: A compare-and-set-only backend uses the helper
+- **WHEN** a backend's only atomic primitive is compare-and-set
+- **THEN** it satisfies `apply` by delegating to `apply_via_cas`, and the `load → decide → set-if-unchanged` retry loop is not re-implemented per backend
+
+#### Scenario: Optimistic compare-and-set is not mandated
+- **WHEN** a backend has a transaction or a lock available
+- **THEN** it implements `apply` with that native atomic scope and is not required to use compare-and-set, because the contract fixes the decision but not the concurrency-control mechanism
