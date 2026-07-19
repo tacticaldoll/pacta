@@ -1,7 +1,7 @@
 //! The pure, zero-dependency contract for Pacta.
 //!
 //! Pacta operates on three axioms:
-//! 1. Store is Lifecycle (no business logic, no retry/delay logic).
+//! 1. Registry is Lifecycle (no business logic, no retry/delay logic).
 //! 2. Execution is Middleware.
 //! 3. This contract is zero-dependency.
 
@@ -13,36 +13,36 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pact {
     pub id: Uuid,
-    pub lane: String,
+    pub docket: String,
     pub kind: String,
-    pub payload: Vec<u8>,
+    pub clause: Vec<u8>,
 }
 
-/// An opaque token proving authority to resolve a specific reservation.
+/// An opaque token proving authority to settle a specific claim.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReservationReceipt(pub Uuid);
+pub struct Retainer(pub Uuid);
 
-/// A reserved job and the receipt required to resolve it.
+/// A claimed pact and the retainer required to settle it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Reservation {
+pub struct Claim {
     pub pact: Pact,
-    pub receipt: ReservationReceipt,
-    // Lease information would go here
+    pub retainer: Retainer,
+    // Retainer expiry information would go here.
 }
 
-/// The Store manages the lifecycle of Pacts. It is a pure state machine.
-pub trait Store: Send + Sync {
+/// The Registry manages the lifecycle of Pacts. It is a pure state machine.
+pub trait Registry: Send + Sync {
     type Error;
 
-    /// Lock a pact for execution.
-    fn reserve(&self, lanes: &[&str]) -> Result<Option<Reservation>, Self::Error>;
+    /// Claim a pact for execution from one of the requested dockets.
+    fn claim(&self, dockets: &[&str]) -> Result<Option<Claim>, Self::Error>;
 
-    /// Extend the lease of an ongoing Reservation.
-    fn heartbeat(&self, receipt: &ReservationReceipt) -> Result<(), Self::Error>;
+    /// Extend the retainer of an ongoing claim.
+    fn heartbeat(&self, retainer: &Retainer) -> Result<(), Self::Error>;
 
-    /// Mark the pact as successfully completed.
-    fn ack(&self, receipt: &ReservationReceipt) -> Result<(), Self::Error>;
+    /// Mark the pact as successfully fulfilled.
+    fn fulfill(&self, retainer: &Retainer) -> Result<(), Self::Error>;
 
-    /// Mark the pact as permanently failed (Dead).
-    fn nack(&self, receipt: &ReservationReceipt) -> Result<(), Self::Error>;
+    /// Mark the pact as breached.
+    fn breach(&self, retainer: &Retainer) -> Result<(), Self::Error>;
 }

@@ -2,24 +2,37 @@
 
 ## Purpose
 
-Pacta is a Tower-native, Middleware-driven task runtime for Rust. It is designed to act as an ultra-minimalist job queue that delegates all execution orchestration (retries, timeouts, rate limiting, routing) to the Middleware ecosystem. 
+Pacta is a Tower-native, middleware-driven contract runtime for Rust. It is
+designed to act as an ultra-minimalist durable pact system that delegates all
+execution orchestration (retries, timeouts, rate limiting, routing) to the
+middleware ecosystem.
 
-By stripping business logic from the storage layer, Pacta enables flawless backend substitutability, massive concurrency (via `&self` Handlers), and out-of-the-box event replay capabilities.
+By stripping business logic from the registry layer, Pacta enables backend
+substitutability, massive concurrency through executor implementations, and
+out-of-the-box event replay capabilities.
 
 ## Core Contract
 
 The behavior that must be protected at all costs:
-- **Storage Purity**: The `Store` is a pure state machine (`reserve`, `ack`, `nack`, `heartbeat`). It never computes exponential backoff, never manages visibility delays, and never inspects payloads.
-- **Handler Isolation**: Execution is entirely isolated into Middleware stacks.
+- **Registry Purity**: The `Registry` is a pure lifecycle state machine
+  (`claim`, `fulfill`, `breach`, `heartbeat`). It never computes exponential
+  backoff, never manages visibility delays, and never inspects clauses.
+- **Executor Isolation**: Execution is isolated into middleware stacks.
 
 ## Terminology
 
 - **Signal**: A short-lived external trigger (e.g., an HTTP request or a Cron tick).
 - **Pact**: A durable command or contract, generated from a Signal, ready to be executed.
-- **Store**: The pure state machine tracking the lifecycle of Pacts.
-- **Driver**: The runtime loop that fetches Pacts from the Store and feeds them into the Handler.
-- **Handler**: The Middleware stack responsible for executing the Pact.
-- **Reservation**: The lease held by the Driver over a Pact while it is being executed.
+- **Docket**: The public grouping from which Pacts are selected.
+- **Clause**: The business data carried by a Pact.
+- **Brief**: Non-business operational context attached to a Pact.
+- **Registry**: The pure lifecycle state machine tracking Pacts and Dockets.
+- **Executor**: The public role responsible for executing a claimed Pact through middleware.
+- **Claim**: A Pact plus the authority needed to process it.
+- **Retainer**: The opaque token proving authority to fulfill or breach a Claim.
+- **Tribunal**: Terminal review for exhausted Pacts that should no longer be handled automatically.
+
+See `docs/domain-language.md` for the canonical glossary and legacy mapping.
 
 ## Change Prioritization
 
@@ -27,5 +40,5 @@ When comparing possible changes, prefer the one that protects the core contract 
 
 1. Correctness, data integrity, and strict adherence to the Three Axioms.
 2. Specified feature completeness for the Middleware ecosystem.
-3. Operator observability (tracing, dead-letter storage).
-4. Scale-out and new `Store` backend integrations.
+3. Operator observability (tracing, tribunal review).
+4. Scale-out and new `Registry` backend integrations.

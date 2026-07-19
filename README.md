@@ -1,18 +1,37 @@
 # Pacta
 
-A Tower-native, Middleware-driven task runtime for Rust.
+A Tower-native, middleware-driven contract runtime for Rust.
 
 Pacta was born from a fundamental critique of traditional, broker-centric job queues. Traditional queues suffer from "Semantic Bloat" — they pull execution policies (retries, backoff, routing, dead-letter storage, priority) into the storage layer and the core job envelope. This forces every storage backend (Postgres, Redis, etc.) to implement complex business logic, making the system heavy, hard to extend, and prone to breaking.
 
-Pacta takes a different approach: **Execution is Middleware, Storage is purely a Lifecycle State Machine.**
+Pacta takes a different approach: **Execution is Middleware, the Registry is
+purely a Lifecycle State Machine.**
 
 ## Philosophy
 
-By completely delegating execution orchestration (retries, timeouts, tracing, rate limiting) to the `Middleware` ecosystem, the storage layer (`Store`) degrades into a pure, minimal state machine. The Store only tracks lifecycle transitions: `reserve` (lease), `ack` (success), and `nack` (failure/dead).
+By completely delegating execution orchestration (retries, timeouts, tracing,
+rate limiting) to the middleware ecosystem, the storage role (`Registry`)
+degrades into a pure, minimal state machine. The Registry only tracks lifecycle
+transitions: `claim`, `heartbeat`, `fulfill`, and `breach`.
 
-- **Store**: Pure state machine. Never computes backoff, never manages delays.
-- **Execution**: Handled by standard `Tower` Middleware.
+- **Registry**: Pure state machine. Never computes backoff, never manages delays,
+  and never inspects clauses.
+- **Executor**: Public role for executing claimed pacts through standard `Tower`
+  middleware.
 - **Contract**: Zero-dependency `pacta-contract` enforced by `tianheng`.
+
+## Domain Language
+
+Pacta's public API uses contract and arbitration terms:
+
+- `Pact` - durable unit of obligation.
+- `Docket` - grouping from which pacts are selected.
+- `Clause` - business data carried by a pact.
+- `Claim` and `Retainer` - short-term processing authority.
+- `Fulfill` and `Breach` - lifecycle settlement outcomes.
+- `Tribunal` - terminal review for exhausted pacts.
+
+See `docs/domain-language.md` for the full glossary and legacy mapping.
 
 ## Getting Started
 
