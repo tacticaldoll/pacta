@@ -205,6 +205,41 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
     conformance-tested semantic — and reclaim-fence is arguably the better design (it salvages
     genuinely-done work rather than redundantly requeuing it). If reclaim-fence is ever
     reconsidered, that is a separate claim-authority case, never smuggled into the async work.
+  - **Fence reconciliation — a NAMED go/no-go, decide *before* worklane rebinds, not during.**
+    A three-pass audit established this is not a tweak: the fence is *deliberate and
+    conformance-locked on both sides*, and the divergence is **backend-uniform** — worklane
+    fences on lease expiry in postgres (`ack DELETE … leased_until > now`), sqlite (the guarded
+    re-lease `… WHERE receipt = ? AND leased_until > ?`), and redis (lease-expiry scored sets,
+    `ZRANGEBYSCORE … now`) alike; pacta fences on reclaim everywhere. So "faithful second
+    binding" must be stated precisely: the async binding is the faithful async form of **pacta's**
+    contract (reclaim-fenced) — **not** of worklane's. Do not ship or narrate it as "worklane's
+    contract, async." The reconciliation has exactly three moves, each with a real cost:
+    1. **pacta yields** — offer an expiry-fenced settle/release. Cost: abandons a deliberate,
+       shipped, conformance-tested design (breaks `late_fulfill_before_reclaim_succeeds`) — a
+       breaking pacta contract change. Rejected unless reclaim-fence is judged wrong on its own
+       merits (a separate claim-authority case).
+    2. **worklane yields** — adopt reclaim-fence (contract change + worklane conformance update).
+       Arguably better (fewer redundant redeliveries), but a conscious change to worklane's
+       shipped promise; not "承諾不變".
+    3. **worklane driver overrides** `fulfill`/`release` to re-add its expiry check. Faithful to
+       worklane's promise, but then those two ops run worklane's semantics, **forfeiting the
+       single-source drift-prevention** that justified composing on pacta at all.
+    This is the load-bearing decision for the whole "worklane on pacta" thesis. It is worklane's
+    to make (pacta keeps its shipped fence); record the chosen move + its conformance impact
+    before the rebind. **Coverage to pin once the move is chosen** (held now to avoid hardening a
+    contested boundary): pacta's `heartbeat` `now == expiry` boundary (`>=`) is currently untested
+    in `pacta-conformance` — pin it for whichever fence wins. (The release-on-lapsed case is
+    already covered: `released_pact_withheld_until_reclaimable` asserts withholding at `at(3000)`,
+    past the original lease.)
+  - **Re-scope the async-conformance gate.** `pacta-conformance` is not single-source scenario
+    *data* — it is 16 imperative `fn<R: Registry>` bodies bound to the *sync* trait. So "add a
+    thin async runner" is not available: the honest options are a `block_on` shim (thin, one copy,
+    but tests the async backend *synchronously* — proves state-machine parity, not real async/
+    concurrency) or duplicated/macro'd async scenarios (real async path, but reintroduces the
+    sync/async drift the design set out to kill). The "sync and async cannot drift" guarantee is
+    structural only for the shared `lifecycle` kernel, **not** for scenario coverage. Decide
+    block_on-vs-duplicate when the runner is actually built (worklane-forced), and do not call the
+    async binding "proven" until it exists in the chosen form.
   - **Version-cadence isolation — delivered (not just claimed).** The async crates carry
     their **own version line** (`pacta-contract-async` / `pacta-memory-async` at `0.1.0`),
     off the workspace lockstep, so the async surface can evolve — even break at `0.x` —
