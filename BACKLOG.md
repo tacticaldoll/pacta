@@ -37,6 +37,16 @@ crate requires a justified Tianheng boundary or the coverage gate fails, and a n
 backend's justification must address why the thin library, rather than a composer,
 owns it.
 
+## Release Plan
+
+0.1.0 publishes to crates.io. The publishable crates are `pacta-contract`,
+`pacta-executor`, `pacta-driver`, `pacta-memory`, and `pacta-conformance`;
+`pacta-governance` stays unpublished (an internal gate that depends on `tianheng`).
+A follow-on change, `establish-pacta-facade`, adds a `pacta` facade crate as the
+curated published entrypoint; it is ordered AFTER this packaging work, because the
+facade's "publisher owns the entrypoint" justification holds only once the workspace
+actually publishes.
+
 ## Candidate Pattern Areas
 
 These areas may become future OpenSpec changes only after their boundary and

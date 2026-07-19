@@ -2,9 +2,14 @@
 name = "pacta-conformance"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
 description = "Backend-agnostic conformance suite for Pacta Registry implementations."
-publish = false
+publish.workspace = true
 
 [dependencies]
 pacta-contract.workspace = true
