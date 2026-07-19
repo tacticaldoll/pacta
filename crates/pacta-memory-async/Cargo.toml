@@ -1,0 +1,21 @@
+[package]
+name = "pacta-memory-async"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords.workspace = true
+categories.workspace = true
+description = "In-memory async Pacta Registry backend: the reference AsyncRegistry, composing over the shared lifecycle kernel."
+publish.workspace = true
+
+[dependencies]
+pacta-contract.workspace = true
+pacta-contract-async.workspace = true
+async-trait.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

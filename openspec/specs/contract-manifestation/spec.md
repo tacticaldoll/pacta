@@ -28,6 +28,10 @@ consumer does not mistake a reference for a production component.
 - **WHEN** a consumer reads the `pacta-memory` documentation
 - **THEN** it states that `pacta-memory` is an in-memory reference backend, not a durable or production backend, and that durable backends live outside the workspace and prove themselves against `pacta-conformance`
 
+#### Scenario: The async reference backend is named
+- **WHEN** a consumer reads the `pacta-memory-async` documentation
+- **THEN** it states that `pacta-memory-async` is the in-memory reference backend for the async binding, not a durable or production backend, and that durable async backends live outside the workspace and prove themselves the same way
+
 #### Scenario: The reference runtime states its boundary
 - **WHEN** a consumer reads the `Driver` documentation
 - **THEN** it states that `Driver` drives synchronously and does not heartbeat a claim in flight, so it is safe for tasks shorter than the lease and for single-worker use, and that long or multi-worker durable workloads compose their own loop over the `Registry` contract
