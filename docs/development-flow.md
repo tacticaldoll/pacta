@@ -45,4 +45,12 @@ cargo build
 cargo test
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+cargo deny check
+cargo run -p pacta-governance -- check --manifest-path Cargo.toml
 ```
+
+CI runs the same gates on push and pull request. Rust style lives in these
+checks: rustfmt formats, clippy denies warnings, rustdoc denies documentation
+warnings, cargo-deny owns resolved supply-chain policy, and `pacta-governance`
+owns Tianheng architecture boundaries.
