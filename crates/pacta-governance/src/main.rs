@@ -14,7 +14,8 @@ const CONTRACT_REASON: &str = "pacta-contract is the isolated core contract. It 
 const EXECUTOR_REASON: &str = "pacta-executor owns the Pacta-native execution vocabulary. It may depend only on pacta-contract, never on drivers, adapters, backends, or external frameworks.";
 const DRIVER_REASON: &str = "pacta-driver is mechanical runtime glue. It may depend only on pacta-contract and pacta-executor, never on adapters, backends, or external frameworks.";
 const GOVERNANCE_REASON: &str = "the governance gate must stay independent of the workspace graph it judges: it may depend only on governance-family tooling (tianheng and its guibiao coverage core), never on a workspace crate under judgment.";
-const KERNEL_ASYNC_REASON: &str = "the sans-I/O lifecycle kernel must stay runtime-agnostic: its public API must never expose an async fn, so no runtime shape leaks into the contract.";
+const KERNEL_ASYNC_REASON: &str = "the sans-I/O step-driver kernel (crate::kernel) must stay runtime-agnostic: its public API must never expose an async fn, so no runtime shape leaks into the contract.";
+const LIFECYCLE_ASYNC_REASON: &str = "the colorless lifecycle-state kernel (crate::lifecycle) is the single source both the sync and async Registry bindings compose over; it must never expose an async fn, so it stays colorless and the two bindings cannot drift by coloring the shared semantics.";
 const KERNEL_NO_SERDE_REASON: &str = "the sans-I/O kernel is transient driving protocol, not durable state: it must not acquire Serialize/Deserialize, so persisting an in-flight directive or notice can never leak into the contract. Durable records (Pact, Claim, Retainer, Timestamp) carry serde; the kernel must not.";
 const CORE_NO_IO_REASON: &str = "the sans-I/O core contract performs no I/O: no code in pacta-contract (the kernel included) may call into std::io/fs/net/process; I/O lives in runtimes and backends outside the core. Coverage is partial by nature (I/O entry points cannot be enumerated, and macro-expanded I/O such as println! is invisible to a source scan), so this tooth complements review rather than replacing it.";
 const MEMORY_REASON: &str = "pacta-memory is a registry backend outside the core. It may depend only on pacta-contract and uuid, never on drivers, executors, or other backends.";
@@ -200,6 +201,13 @@ fn constitution() -> Constitution {
                 .must_not_expose_async_fn()
                 .including_submodules()
                 .because(KERNEL_ASYNC_REASON),
+        )
+        .async_exposure_boundary(
+            AsyncExposureBoundary::in_crate("pacta-contract")
+                .module("crate::lifecycle")
+                .must_not_expose_async_fn()
+                .including_submodules()
+                .because(LIFECYCLE_ASYNC_REASON),
         )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("pacta-contract")
@@ -702,7 +710,19 @@ pub use pacta_driver::{
         facade_source: &str,
     ) -> Outcome {
         let workspace = TempWorkspace::new(name);
-        workspace.write_package_with_source("pacta-contract", "", contract_source);
+        // Both async-exposure boundaries (crate::kernel and crate::lifecycle) require their
+        // target module to exist, or tianheng refuses the boundary rather than silently never
+        // reacting. A fixture that exercises one module must still present the other, so scaffold
+        // whichever the source omits.
+        let mut source = String::new();
+        if !contract_source.contains("mod kernel") {
+            source.push_str("pub mod kernel {}\n");
+        }
+        if !contract_source.contains("mod lifecycle") {
+            source.push_str("pub mod lifecycle {}\n");
+        }
+        source.push_str(contract_source);
+        workspace.write_package_with_source("pacta-contract", "", &source);
         workspace.write_package_with_source("pacta", facade_dependencies, facade_source);
         workspace.write_root_manifest_members(&["pacta", "pacta-contract"]);
 
@@ -730,6 +750,27 @@ pub use pacta_driver::{
                 id.target == "crate::kernel" && id.rule == "must not expose async fn"
             }),
             "expected the kernel async-exposure boundary to fire: {report:?}"
+        );
+    }
+
+    #[test]
+    fn lifecycle_async_exposure_reaction_fires() {
+        let outcome = semantic_reaction_outcome(
+            "pacta-governance-lifecycle-async-leak",
+            "pub mod lifecycle {\n    pub async fn leak() {}\n}\n",
+            "",
+            "",
+        );
+
+        let Outcome::Violations(report) = outcome else {
+            panic!("expected a lifecycle async-exposure violation, got {outcome:?}");
+        };
+        assert!(
+            report.violations.iter().any(|violation| {
+                let id = violation.id();
+                id.target == "crate::lifecycle" && id.rule == "must not expose async fn"
+            }),
+            "expected the lifecycle async-exposure boundary to fire: {report:?}"
         );
     }
 

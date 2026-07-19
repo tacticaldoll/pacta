@@ -12,6 +12,42 @@
 //! [`lease_millis`](AsyncRegistry::lease_millis) accessor. The four transition operations
 //! (heartbeat, fulfill, breach, release) are default methods that `load -> lifecycle::on_X ->
 //! cas`, so their semantics (including heartbeat's lapsed check) come from the shared kernel.
+//!
+//! # Both halves of the contract
+//!
+//! This binding does not re-specify lifecycle behavior — it references the governed truth in
+//! [`pacta_contract::lifecycle`] and `pacta-conformance`. But an implementer and a consumer each
+//! owe the contract obligations, made explicit here so reading only this crate shows both halves.
+//!
+//! ## What a backend must satisfy (implementer half)
+//!
+//! - **`cas` must be atomic.** It must compare-and-set the pact's state in one indivisible step
+//!   (e.g. a conditional `UPDATE`, or a transaction). If `cas` is not atomic, two workers can
+//!   both observe `expected` and both write — and exactly-once and retainer fencing break
+//!   silently. This is the load-bearing obligation of the transition port.
+//! - **`claim` must honor the eligibility invariant and rotate the retainer.** It must select
+//!   only a pact [`lifecycle::is_claimable`] would admit (available, a lapsed hold, or a
+//!   deferred pact past its instant — never a settled one) and mint a fresh retainer, all
+//!   atomically. It must be a **native, full-scan-free** selection (e.g. SQL `SKIP LOCKED`); it
+//!   must not load the whole docket to filter in memory. Eligibility is re-expressed natively
+//!   per backend, so `pacta-conformance` is the executable proof it matches the invariant.
+//! - **`load` returns the state of the pact the retainer currently holds**, or `None`.
+//!
+//! ## What a consumer owes (user-obligation half)
+//!
+//! - **An idempotent unit of work.** Recovery is **at-least-once**, not exactly-once: a lapsed,
+//!   reclaimed pact is executed again. The work a consumer performs between claim and settle
+//!   must be safe to repeat (compose idempotency with `shaahid`, or make the effect naturally
+//!   idempotent).
+//! - **User-owned lease sizing.** The lease duration ([`lease_millis`](AsyncRegistry::lease_millis))
+//!   is the consumer's to size for its workload; the contract supplies the mechanism, not a
+//!   constant.
+//! - **Runtime-owned heartbeat cadence.** Long work must [`heartbeat`](AsyncRegistry::heartbeat)
+//!   before its lease lapses; when and how often is the runtime's policy.
+//!
+//! Note the fence rule this binding inherits from the frozen contract: a holder whose lease has
+//! lapsed but whose pact **no one has reclaimed** can still settle (its retainer is still the
+//! current holder) — reclaim, not expiry, rotates authority.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -34,9 +70,12 @@ pub trait AsyncRegistry: Send + Sync {
     // --- required primitives ---
 
     /// Claim an eligible pact from one of `dockets` at `now`, rotating the retainer. This is the
-    /// selection primitive: a backend performs it natively (a full-scan-free selection that
-    /// re-expresses the eligibility invariant, e.g. SQL `SKIP LOCKED`), because selection cannot
-    /// be built from `load`/`cas`.
+    /// selection primitive: a backend performs it natively (a full-scan-free selection, e.g. SQL
+    /// `SKIP LOCKED`), because selection cannot be built from `load`/`cas`.
+    ///
+    /// **Obligation:** select only a pact [`lifecycle::is_claimable`] would admit, and mint a
+    /// fresh retainer, atomically. Eligibility is re-expressed natively per backend, so
+    /// `pacta-conformance` is the executable proof it matches the invariant.
     async fn claim(&self, dockets: &[&str], now: Timestamp) -> Result<Option<Claim>, Self::Error>;
 
     /// Load the current lifecycle [`State`] of the pact held by `retainer`, or `None` if the
@@ -46,6 +85,11 @@ pub trait AsyncRegistry: Send + Sync {
     /// Atomically set the state of the pact held by `retainer` to `next` iff its current state
     /// still equals `expected`; return whether it applied. A `false` means the state changed
     /// under the caller (contention, or a lapse and reclaim).
+    ///
+    /// **Obligation:** this must be a single atomic compare-and-set (a conditional `UPDATE` or a
+    /// transaction). A non-atomic implementation — read-then-write with a gap — lets two workers
+    /// both observe `expected` and both write, silently breaking exactly-once and retainer
+    /// fencing. This is the load-bearing obligation of the transition port.
     async fn cas(
         &self,
         retainer: &Retainer,
