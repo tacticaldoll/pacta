@@ -47,6 +47,105 @@ pub trait Middleware<E> {
     fn wrap(&self, executor: E) -> Self::Executor;
 }
 
+/// The no-op middleware: `wrap` returns the executor unchanged. `Identity` is the
+/// neutral element of composition — the empty stack — so "zero middleware" is a
+/// first-class, holdable value rather than an absence.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Identity;
+
+impl<E: Executor> Middleware<E> for Identity {
+    type Executor = E;
+
+    fn wrap(&self, executor: E) -> Self::Executor {
+        executor
+    }
+}
+
+/// Two middleware composed into one, reifying the closure property as a value: because
+/// `Stack` is itself a [`Middleware`], a composed stack can be named, stored, and passed
+/// as one middleware *before* an executor exists. `outer` wraps the result of `inner`,
+/// so `outer` is applied last and therefore observes each execution first.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Stack<Inner, Outer> {
+    inner: Inner,
+    outer: Outer,
+}
+
+impl<Inner, Outer> Stack<Inner, Outer> {
+    /// Compose `inner` and `outer` into one middleware. `outer` wraps `inner`'s result,
+    /// so `outer` observes each execution first.
+    #[must_use]
+    pub const fn new(inner: Inner, outer: Outer) -> Self {
+        Self { inner, outer }
+    }
+}
+
+impl<E, Inner, Outer> Middleware<E> for Stack<Inner, Outer>
+where
+    E: Executor,
+    Inner: Middleware<E>,
+    Outer: Middleware<Inner::Executor>,
+{
+    type Executor = Outer::Executor;
+
+    fn wrap(&self, executor: E) -> Self::Executor {
+        self.outer.wrap(self.inner.wrap(executor))
+    }
+}
+
+/// A blind, ordered assembly of middleware composed over [`Identity`]. It is itself a
+/// [`Middleware`], so applying it is just `wrap`.
+///
+/// It is deliberately *blind*: [`Composition::then`] accepts any `Middleware` through a
+/// single generic operation and inspects nothing, and the type offers no method named for
+/// an orchestration policy (retry, timeout, backoff, circuit, quota, rate-limit) — that
+/// policy is a consumer or sibling concern, never a core convenience.
+///
+/// # Order
+///
+/// Middleware are applied outermost-first in the order added: the **first** middleware
+/// added with [`then`](Composition::then) is the outermost and observes each execution
+/// **first**; the executor is innermost. This mirrors the assembly convention of the
+/// prior art the mechanism is distilled from.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Composition<M> {
+    middleware: M,
+}
+
+impl Composition<Identity> {
+    /// Start an empty composition over [`Identity`].
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            middleware: Identity,
+        }
+    }
+}
+
+impl<M> Composition<M> {
+    /// Add a middleware to the composition. Blind: it accepts any `Middleware` and
+    /// inspects nothing. The first middleware added is outermost (observes each
+    /// execution first); the executor is innermost.
+    #[must_use]
+    pub fn then<N>(self, next: N) -> Composition<Stack<N, M>> {
+        Composition {
+            middleware: Stack::new(next, self.middleware),
+        }
+    }
+}
+
+impl<E, M> Middleware<E> for Composition<M>
+where
+    E: Executor,
+    M: Middleware<E>,
+{
+    type Executor = M::Executor;
+
+    fn wrap(&self, executor: E) -> Self::Executor {
+        self.middleware.wrap(executor)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,5 +250,93 @@ mod tests {
         let mut stacked = BreachMiddleware.wrap(inner);
         let outcome = stacked.execute(dummy_execution()).unwrap();
         assert_eq!(outcome, Outcome::Breached);
+    }
+
+    #[test]
+    fn identity_wrap_returns_the_executor_unchanged() {
+        // Identity is the neutral element: wrapping adds nothing.
+        let mut executor = Identity.wrap(DummyExecutor);
+        assert_eq!(
+            executor.execute(dummy_execution()).unwrap(),
+            Outcome::Fulfilled
+        );
+    }
+
+    #[test]
+    fn stack_is_itself_a_middleware() {
+        // Stack reifies the closure property as a value: a composed pair is one Middleware
+        // that wraps an executor into an executor just like a single middleware does.
+        let stack = Stack::new(IdentityMiddleware, BreachMiddleware);
+        let mut executor = stack.wrap(DummyExecutor);
+        // BreachMiddleware is `outer`, so it is applied last and observes execution first.
+        assert_eq!(
+            executor.execute(dummy_execution()).unwrap(),
+            Outcome::Breached
+        );
+    }
+
+    #[test]
+    fn composition_assembles_and_drives_to_a_settlement() {
+        // The blind assembler composes two pass-through middleware over Identity and
+        // drives to a settlement — the reified mechanism proven to compose.
+        let composed = Composition::new()
+            .then(IdentityMiddleware)
+            .then(IdentityMiddleware);
+        let mut executor = composed.wrap(DummyExecutor);
+        assert_eq!(
+            executor.execute(dummy_execution()).unwrap(),
+            Outcome::Fulfilled
+        );
+    }
+
+    #[test]
+    fn composition_orders_first_added_outermost() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        // A middleware that records its label when its executor runs, so we can observe
+        // the runtime order and assert it matches the documented convention.
+        struct RecordingExecutor<E> {
+            inner: E,
+            label: &'static str,
+            log: Rc<RefCell<Vec<&'static str>>>,
+        }
+        impl<E: Executor> Executor for RecordingExecutor<E> {
+            type Error = E::Error;
+            fn execute(&mut self, execution: Execution) -> Result<Outcome, Self::Error> {
+                self.log.borrow_mut().push(self.label);
+                self.inner.execute(execution)
+            }
+        }
+        struct Recorder {
+            label: &'static str,
+            log: Rc<RefCell<Vec<&'static str>>>,
+        }
+        impl<E: Executor> Middleware<E> for Recorder {
+            type Executor = RecordingExecutor<E>;
+            fn wrap(&self, inner: E) -> Self::Executor {
+                RecordingExecutor {
+                    inner,
+                    label: self.label,
+                    log: Rc::clone(&self.log),
+                }
+            }
+        }
+
+        let log: Rc<RefCell<Vec<&'static str>>> = Rc::new(RefCell::new(Vec::new()));
+        let composed = Composition::new()
+            .then(Recorder {
+                label: "first",
+                log: Rc::clone(&log),
+            })
+            .then(Recorder {
+                label: "second",
+                log: Rc::clone(&log),
+            });
+        let mut executor = composed.wrap(DummyExecutor);
+        executor.execute(dummy_execution()).unwrap();
+
+        // First added is outermost and observes the execution first.
+        assert_eq!(*log.borrow(), vec!["first", "second"]);
     }
 }
