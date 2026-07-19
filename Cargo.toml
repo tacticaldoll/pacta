@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
     "crates/pacta-contract",
+    "crates/pacta-driver",
+    "crates/pacta-executor",
     "crates/pacta-governance"
 ]
 
@@ -12,6 +14,8 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [workspace.dependencies]
+pacta-contract = { path = "crates/pacta-contract" }
+pacta-executor = { path = "crates/pacta-executor" }
 serde = { version = "1.0", features = ["derive"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }
 tianheng = "0.1.6"

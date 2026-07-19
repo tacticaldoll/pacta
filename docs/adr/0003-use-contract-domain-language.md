@@ -6,10 +6,11 @@ Accepted
 
 ## Context
 
-Pacta already established its foundation as a Tower-native runtime with a pure
-lifecycle storage contract and middleware-owned execution. The initial public
-API still used generic queue and lease terms such as `Store`, `Reservation`,
-`reserve`, `ack`, `nack`, `lane`, and `payload`.
+Pacta already established its foundation as a Pacta-native,
+middleware-oriented runtime with a pure lifecycle storage contract and
+middleware-owned execution. The initial public API still used generic queue and
+lease terms such as `Store`, `Reservation`, `reserve`, `ack`, `nack`, `lane`,
+and `payload`.
 
 Those names are mechanically clear, but they weaken Pacta's contract-oriented
 model and keep the API close to the broker-centric vocabulary the project is

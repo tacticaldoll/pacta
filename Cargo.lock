@@ -125,6 +125,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "pacta-driver"
+version = "0.1.0"
+dependencies = [
+ "pacta-contract",
+ "pacta-executor",
+ "uuid",
+]
+
+[[package]]
+name = "pacta-executor"
+version = "0.1.0"
+dependencies = [
+ "pacta-contract",
+]
+
+[[package]]
 name = "pacta-governance"
 version = "0.1.0"
 dependencies = [
