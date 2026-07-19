@@ -22,3 +22,6 @@ uuid.workspace = true
 
 [dev-dependencies]
 pacta-conformance = { workspace = true, features = ["async"] }
+# Test-only: drives the reference async backend's ready futures in adversarial `#[tokio::test]`s.
+# A dev-dependency never reaches a consumer, so it does not widen the crate's dependency budget.
+tokio = { workspace = true, features = ["rt", "macros"] }

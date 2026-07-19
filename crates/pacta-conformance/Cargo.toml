@@ -19,3 +19,10 @@ uuid.workspace = true
 # Opt-in async runner. Off by default so a sync-only consumer of the suite compiles no async
 # binding code and pulls no async runtime. Enables pacta-contract's async binding.
 async = ["pacta-contract/async"]
+
+[dev-dependencies]
+# Test-only: drives the reactor-backed fixture (whose futures park on a real timer) through the
+# public `run_async_with` entry, proving a real-reactor backend reuses the shared scenarios. A
+# dev-dependency never reaches a consumer, so the crate's normal-dependency budget is unchanged —
+# the async runner itself pulls no runtime (it is generic over a caller-supplied `BlockingDriver`).
+tokio = { workspace = true, features = ["rt", "macros", "time"] }

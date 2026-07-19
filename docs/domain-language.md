@@ -26,14 +26,19 @@ generic queue-runtime behavior.
 
 ## Architecture
 
-- `Registry` - the pure lifecycle state machine that preserves pacts and dockets.
+- `Registry` - the durable lifecycle-authority port that preserves pacts and dockets
+  and decides claim, lease, and settlement authority. It is the I/O-owning port, not
+  the pure machine itself: the pure, colorless state machine is `lifecycle`, which
+  every `Registry` backend composes over.
 - `Executor` - the public role that executes claimed pacts through middleware.
 - `Execution` - a single attempt to handle a claimed pact.
 - `Outcome` - the executor's result for an execution.
 - `Settlement` - the lifecycle conclusion applied to a claim, currently fulfill
   or breach.
 - `Middleware` - Pacta-native execution composition around an executor. It acts as a decorator without framework concepts like readiness or generic requests.
-- `Policy` - A minimal value naming an orchestration intent (like retry or timeout) that is evaluated by middleware, separated from the actual orchestration behavior.
+- `lifecycle` - the pure, colorless, sans-I/O state machine that owns the lifecycle
+  semantics (eligibility, transitions, the holder authority check, and lease
+  arithmetic); every `Registry` backend composes over it so the semantics cannot drift.
 - `Driver` - a mechanical runtime-loop term for polling a registry and driving
   execution. Use it when discussing implementation mechanics, not as the main
   public role.
