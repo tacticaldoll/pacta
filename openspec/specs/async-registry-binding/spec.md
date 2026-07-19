@@ -6,19 +6,22 @@ An asynchronous binding of the frozen `Registry` caller contract, for durable ba
 async I/O and cannot implement the synchronous trait. It is a *second binding* of the same five
 operations, not new semantics: the lifecycle semantics are single-sourced in
 `pacta_contract::lifecycle`, and both bindings share one implementer-facing transition port
-(`apply`), so they cannot drift. It lives in a separate `pacta-contract-async` crate so sync-only
-consumers never pull the async dependency.
+(`apply`), so they cannot drift. It lives behind `pacta-contract`'s `async` feature (a feature-gated
+module, not a separate crate) so sync-only consumers that do not enable it compile no async.
 
 ## Requirements
 
 ### Requirement: An Async Binding Of The Frozen Registry Contract
-Pacta SHALL provide an `AsyncRegistry` trait, in a separate `pacta-contract-async` crate, that is
-a faithful asynchronous binding of the frozen five-op `Registry` caller contract — the same
-operations (claim, heartbeat, fulfill, breach, release) with the same semantics, made asynchronous.
-It SHALL add no operation the sync contract lacks. The caller-facing five-op contract and its
-semantics SHALL be identical across the sync and async bindings, and the two bindings SHALL share
-one implementer-facing transition port so they cannot drift. Because the claim authority behaves
-identically, this is a second binding of the frozen contract, not new semantics.
+Pacta SHALL provide an `AsyncRegistry` trait, behind `pacta-contract`'s `async` feature (a
+feature-gated module, not a separate crate), that is a faithful asynchronous binding of the frozen
+five-op `Registry` caller contract — the same operations (claim, heartbeat, fulfill, breach, release)
+with the same semantics, made asynchronous. It SHALL add no operation the sync contract lacks. The
+caller-facing five-op contract and its semantics SHALL be identical across the sync and async
+bindings, and the two bindings SHALL share one implementer-facing transition port so they cannot
+drift. Because the claim authority behaves identically, this is a second binding of the frozen
+contract, not new semantics. The async binding SHALL be isolated by the feature gate: a consumer that
+does not enable `async` SHALL compile no async binding code, so a sync-only consumer pulls no async
+surface.
 
 #### Scenario: The async trait mirrors the five ops
 - **WHEN** a caller uses `AsyncRegistry`
@@ -27,6 +30,10 @@ identically, this is a second binding of the frozen contract, not new semantics.
 #### Scenario: The caller-facing five ops are unchanged
 - **WHEN** the bindings are unified on the shared transition port
 - **THEN** the caller-facing five ops (claim, heartbeat, fulfill, breach, release), `Outcome`, and the value types keep their meaning; only the implementer-facing required-method set changes, and it changes identically for both bindings
+
+#### Scenario: A sync-only consumer compiles no async
+- **WHEN** a consumer depends on `pacta-contract` without enabling the `async` feature
+- **THEN** the `AsyncRegistry` binding is absent from the build, so the sync-only consumer compiles no async binding code and pulls no async surface
 
 ### Requirement: Backends Implement Primitives; Semantics Stay Single-Sourced
 The `AsyncRegistry` trait SHALL require a backend to implement only a native selection (`claim`), a
