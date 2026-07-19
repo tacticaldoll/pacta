@@ -243,7 +243,9 @@ use `strict_external()` (which exists only to also catch external-crate heads). 
 reaction is acknowledged to be inherently partial — I/O entry points cannot be
 enumerated, and macro-expanded I/O such as `println!` is not seen by a source scan —
 and SHALL state that partiality in its reason, complementing rather than replacing
-review.
+review. The reaction SHALL be proven to fire by a reaction test, so a misconfigured
+or silently no-op boundary — a mistyped prefix, a wrong module target — cannot pass
+forever behind a clean workspace.
 
 #### Scenario: A synchronous I/O call in the core fails governance
 - **WHEN** any code in the `pacta-contract` core crate, the kernel included, calls into `std::io`, `std::fs`, `std::net`, or `std::process`
@@ -252,6 +254,10 @@ review.
 #### Scenario: Runtime I/O outside the core is allowed
 - **WHEN** a runtime crate such as `pacta-driver` performs I/O
 - **THEN** the governance reaction does not reject it, because the no-I/O prohibition scopes to the `pacta-contract` core crate
+
+#### Scenario: The no-I/O reaction is proven to fire
+- **WHEN** the governance test suite runs
+- **THEN** it asserts that the static check reports a `must not call inline` violation for a fixture whose `pacta-contract` calls into each of `std::io`, `std::fs`, `std::net`, and `std::process`, so the proof distinguishes each reacting boundary from one that silently never fires
 
 ### Requirement: Governance Fails Loudly On Unreadable Inputs
 The executable governance gate SHALL NOT let a file-scanning check pass vacuously
@@ -275,4 +281,21 @@ no-vacuous-pass parity the coverage check already enforces.
 #### Scenario: The real workspace stays clean
 - **WHEN** the gate runs against the workspace with all governed files present and readable
 - **THEN** it reports no vacuous-input failure
+
+### Requirement: Colorless Kernel Exposes No Return-Position Existentials
+Pacta SHALL reject a return-position `impl Trait` (RPIT) in the public API of the sans-I/O kernels —
+the step-driver kernel (`crate::kernel`) and the colorless lifecycle-state kernel
+(`crate::lifecycle`) — because the async-exposure guard catches only a literal `async fn`, while a
+`fn -> impl Future` desugars to the same runtime coloring and would otherwise escape. The kernels
+return named types, not existentials, so a Tianheng `impl_trait_boundary` SHALL forbid any RPIT there,
+closing the runtime-coloring hole that would let the sync and async bindings drift. The reaction SHALL
+be proven to fire.
+
+#### Scenario: A returned impl Trait in a kernel is rejected
+- **WHEN** the public API of `crate::kernel` or `crate::lifecycle` returns a written `impl Trait` (for example `fn drive() -> impl core::future::Future`)
+- **THEN** the governance reaction fails via the hunyi impl-trait dimension, because the colorless kernel must return named types rather than an existential that could carry runtime coloring
+
+#### Scenario: The impl-trait reaction is proven to fire
+- **WHEN** the governance test suite runs
+- **THEN** it asserts that the semantic check reports a `must not expose impl trait` violation for a fixture whose kernel returns `impl Future`, so the proof distinguishes a reacting boundary from one that always passes
 
