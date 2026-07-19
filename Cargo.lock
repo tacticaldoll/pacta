@@ -204,7 +204,6 @@ dependencies = [
  "pacta-conformance",
  "pacta-contract",
  "pacta-contract-async",
- "tokio",
  "uuid",
 ]
 
