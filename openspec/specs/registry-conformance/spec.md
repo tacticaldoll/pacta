@@ -80,3 +80,43 @@ away from the prior retainer.
 - **WHEN** the suite releases a claim and the prior holder then settles with its retainer
 - **THEN** the settlement is rejected
 
+### Requirement: Conformance Is Offered For The Async Binding
+The conformance suite SHALL verify an `AsyncRegistry` backend against the same lifecycle scenarios it
+verifies sync `Registry` backends against, so the async binding is held to the same correctness
+contract as the sync binding. The async runner SHALL reuse the sync suite's scenarios rather than a
+duplicated scenario set, so sync and async coverage cannot drift. The async runner and its dependency
+on the async binding SHALL be gated so a sync-only consumer of the conformance suite pulls no async
+binding dependency and no async runtime.
+
+#### Scenario: The async binding runs the same scenarios
+- **WHEN** an `AsyncRegistry` backend is subjected to the async conformance runner
+- **THEN** it is exercised against the same lifecycle scenarios (claim, settlement, lapse, heartbeat,
+  deferred reclaim, at-least-once safety) the sync suite runs, through the public `AsyncRegistry`
+  trait
+
+#### Scenario: Coverage is single-sourced, not duplicated
+- **WHEN** the async runner exercises a scenario
+- **THEN** it drives the same scenario definition the sync suite uses rather than a parallel copy, so
+  a change to a scenario applies to both bindings at once
+
+#### Scenario: Sync-only consumers pull no async dependency
+- **WHEN** a sync-only consumer builds the conformance suite without opting into the async runner
+- **THEN** the build pulls neither the async binding crate nor an async runtime
+
+### Requirement: Conformance Covers Concurrent Transition Contention
+The conformance suite SHALL verify, for the async binding, that concurrent transitions contending on
+a single claimed pact preserve the at-most-once application guaranteed by the set-if-unchanged fence —
+the race surface the async binding's `load`-then-`cas` decomposition introduces and the sync fat-verb
+shape does not have. This SHALL be demonstrated against the reference async backend under genuine
+multi-threaded parallelism.
+
+#### Scenario: Contending transitions apply at most once
+- **WHEN** two workers concurrently attempt a transition on the same claimed pact
+- **THEN** exactly one set-if-unchanged succeeds and the other reloads to a not-current-holder, so the
+  transition is applied at most once
+
+#### Scenario: The contention is exercised under real parallelism
+- **WHEN** the concurrent contention scenario runs
+- **THEN** it runs under genuine multi-threaded parallelism, because the reference backend's ready
+  futures do not interleave on a single-threaded executor
+
