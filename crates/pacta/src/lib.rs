@@ -20,9 +20,10 @@
 //! leases a [`Claim`], reclaims a lapsed lease through the normal claim path with a
 //! rotated [`Retainer`], and rejects a heartbeat presented after expiry. This half
 //! is not merely described — it is *executably proven*: a backend runs the
-//! `pacta-conformance` suite, and passing it is what it means to satisfy the
-//! contract. Durable backends live outside this workspace and prove themselves the
-//! same way.
+//! `pacta-conformance` suite (a dev-dependency) and passing it is what it means to
+//! satisfy the contract — the backend author's two-crate journey is implement
+//! `Registry` from `pacta`, then prove it with `pacta-conformance`. Durable backends
+//! live outside this workspace and prove themselves the same way.
 //!
 //! **What you owe in return (the obligation half).** Recovery is *at-least-once*,
 //! not exactly-once: a pact whose holder stops without settling is reclaimed and may
@@ -40,12 +41,16 @@
 //! durable workload composes its own loop over the [`Registry`] contract. See
 //! [`Driver`]'s own documentation for the boundary in full.
 //!
-//! # What is deliberately not here
+//! # Stability tiers
 //!
-//! The sans-I/O lifecycle kernel (`pacta_contract::kernel`) is advanced machinery and
-//! is intentionally absent from this curated surface. Reach for it through
-//! [`pacta-contract`](pacta_contract) directly if you are building a custom runtime;
-//! most consumers compose with [`Driver`] instead.
+//! This facade and the backend-author path are the **recommended** tier — the faces
+//! converging toward Pacta's long-term contract. The sans-I/O lifecycle kernel
+//! (`pacta_contract::kernel`) is the **advanced** tier: lower stability intent (its
+//! API may evolve as the runtime story settles), though still a supported, governed
+//! core surface — not unsupported or slated for removal. It is intentionally absent
+//! from this curated surface; reach for it through [`pacta-contract`](pacta_contract)
+//! directly only to build a custom runtime. Most consumers compose with [`Driver`]
+//! instead. (Tiers state *intent*; at 0.1.x SemVer holds every face unstable.)
 //!
 //! # Composing the lifecycle
 //!
