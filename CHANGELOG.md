@@ -4,6 +4,29 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-07-14
+
+Adds the deferred-reclaim primitive that durable retry composes from. No breaking
+change under 0.x — the new `Registry` method is additive at 0.1.x, where every face
+is unstable.
+
+### Added
+
+- **`Registry::release(retainer, reclaimable_at)`** — a non-terminal settlement that
+  relinquishes a claim and makes the pact reclaimable again only at or after a
+  consumer-supplied `Timestamp`. The core computes no delay: it honors the injected
+  instant exactly as it honors injected `now`, so backoff policy stays with the caller
+  and `Pact` carries no delay. Release rotates authority like a lapse. The reference
+  backend implements it and the conformance suite gains deferred-reclaim coverage, so
+  every backend must prove it.
+- A `durable_retry` example demonstrating `release` composed into backoff'd durable
+  retry — the backoff policy in the consumer, no delay in the core.
+
+### Changed
+
+- Documentation naming aligned to the contract register: the `Pact` doc calls it a
+  "durable obligation" (was "command"), and a driver doc nit reads "pact" (was "task").
+
 ## [0.1.1] - 2026-07-13
 
 A kernel behavior correction plus documentation and packaging polish. No breaking
