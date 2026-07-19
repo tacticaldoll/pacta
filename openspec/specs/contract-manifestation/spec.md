@@ -9,18 +9,23 @@ the `pacta` facade, so a consumer who reads only the published crate sees both h
 of the contract without reading internal specs. The projection SHALL state the
 implementer half (what a `Registry` must satisfy) and the user-obligation half (what
 the consumer owes), and SHALL NOT re-specify behavior — it references the governed
-truth. The **async binding** SHALL likewise manifest both halves on its own surface,
-including the obligations specific to it: the implementer half SHALL state that `apply`
-must apply the kernel decision within one atomic scope (or exactly-once and fencing
-break) and that `claim` must honor the eligibility invariant as a native, full-scan-free
-selection; the user-obligation half SHALL state the same reciprocal obligations as the
-sync facade, and SHALL additionally state that the runtime and its coloring (async,
-`Send`, executor choice) are the consumer's to compose — the async binding does not force
-a runtime property.
+truth. The implementer half SHALL state the contract as the five caller-facing
+lifecycle operations (claim, heartbeat, fulfill, breach, release) delivered over the
+backend's native primitives — an atomic native `claim` selection, a `lease_millis`
+accessor, and an atomic `apply` transition port, with heartbeat, fulfill, breach, and
+release provided as defaults over `apply` — rather than as a fixed list of four
+separately-implemented methods. The **async binding** SHALL likewise manifest both
+halves on its own surface, including the obligations specific to it: the implementer
+half SHALL state that `apply` must apply the kernel decision within one atomic scope
+(or exactly-once and fencing break) and that `claim` must honor the eligibility
+invariant as a native, full-scan-free selection; the user-obligation half SHALL state
+the same reciprocal obligations as the sync facade, and SHALL additionally state that
+the runtime and its coloring (async, `Send`, executor choice) are the consumer's to
+compose — the async binding does not force a runtime property.
 
 #### Scenario: The facade documents the implementer half
 - **WHEN** a consumer reads the `pacta` crate-root documentation
-- **THEN** it states that a `Registry` must provide the claim, heartbeat, fulfill, and breach lifecycle with a lease, and that `pacta-conformance` is the executable proof a backend satisfies it
+- **THEN** it states that a `Registry` provides the claim, heartbeat, fulfill, breach, and release lifecycle over a lease — implemented as a native atomic `claim` selection, a `lease_millis` accessor, and an atomic `apply` transition port with the transition operations as defaults — and that `pacta-conformance` is the executable proof a backend satisfies it
 
 #### Scenario: The facade documents the user-obligation half
 - **WHEN** a consumer reads the `pacta` crate-root documentation
@@ -28,7 +33,7 @@ a runtime property.
 
 #### Scenario: The async binding documents its implementer half
 - **WHEN** a consumer reads the async binding's documentation
-- **THEN** it states that a backend implements the selection and the `apply` transition port, that `apply` must apply the kernel decision within one atomic scope (or exactly-once and fencing break), and that `claim` must honor the eligibility invariant as a native, full-scan-free selection
+- **THEN** it states that a backend implements the native selection and the `apply` transition port plus a lease accessor, that `apply` must apply the kernel decision within one atomic scope (or exactly-once and fencing break), and that `claim` must honor the eligibility invariant as a native, full-scan-free selection
 
 #### Scenario: The async binding documents its user-obligation half
 - **WHEN** a consumer reads the async binding's documentation
@@ -55,11 +60,18 @@ consumer does not mistake a reference for a production component.
 Pacta SHALL anchor its public composition contract in a doctest at the `pacta` facade
 crate root, so "claim, execute through middleware, and settle composes through the
 public surface" is verified by the test gate rather than only asserted by an example
-binary.
+binary. The anchoring doctest SHALL compose against a **legal** `Registry` — one that
+holds real lifecycle state, applies the transition within an atomic scope, and persists
+the next state — and SHALL prove the lifecycle actually advanced, so the compiler-check
+is a real composition proof rather than a shape that type-checks over a no-op backend.
 
 #### Scenario: The facade doctest composes the lifecycle
 - **WHEN** `cargo test --workspace` runs
 - **THEN** a `pacta` crate-root doctest claims a pact, executes it through a pass-through `Middleware`, and settles it through the facade's public API, and fails if that composition path stops compiling
+
+#### Scenario: The doctest composes against a legal stateful backend
+- **WHEN** the facade doctest's registry settles the claimed pact
+- **THEN** it applied the transition to real held state and persisted it, so a subsequent claim of that pact returns nothing — proving the composition advanced the lifecycle rather than type-checking over a no-op `apply`
 
 ### Requirement: Core Contract Records Are Extensible
 Pacta SHALL keep its core contract data records extensible across a published minor

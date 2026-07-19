@@ -294,23 +294,27 @@ mod tests {
         use std::cell::RefCell;
         use std::rc::Rc;
 
-        // A middleware that records its label when its executor runs, so we can observe
-        // the runtime order and assert it matches the documented convention.
+        // A middleware that records both when its layer is *entered* (before delegating inward) and
+        // *exited* (after the inner execution returns), so the full nesting is observable — not just
+        // the final outcome. A regression that inverted the nesting but kept the outcome would still
+        // be caught by comparing the whole trace.
         struct RecordingExecutor<E> {
             inner: E,
             label: &'static str,
-            log: Rc<RefCell<Vec<&'static str>>>,
+            log: Rc<RefCell<Vec<String>>>,
         }
         impl<E: Executor> Executor for RecordingExecutor<E> {
             type Error = E::Error;
             fn execute(&mut self, execution: Execution) -> Result<Outcome, Self::Error> {
-                self.log.borrow_mut().push(self.label);
-                self.inner.execute(execution)
+                self.log.borrow_mut().push(format!("{}:enter", self.label));
+                let outcome = self.inner.execute(execution);
+                self.log.borrow_mut().push(format!("{}:exit", self.label));
+                outcome
             }
         }
         struct Recorder {
             label: &'static str,
-            log: Rc<RefCell<Vec<&'static str>>>,
+            log: Rc<RefCell<Vec<String>>>,
         }
         impl<E: Executor> Middleware<E> for Recorder {
             type Executor = RecordingExecutor<E>;
@@ -323,7 +327,19 @@ mod tests {
             }
         }
 
-        let log: Rc<RefCell<Vec<&'static str>>> = Rc::new(RefCell::new(Vec::new()));
+        // The innermost executor records that it ran, so the trace shows the executor is innermost.
+        struct RecordingInner {
+            log: Rc<RefCell<Vec<String>>>,
+        }
+        impl Executor for RecordingInner {
+            type Error = DummyError;
+            fn execute(&mut self, _execution: Execution) -> Result<Outcome, Self::Error> {
+                self.log.borrow_mut().push("executor".to_string());
+                Ok(Outcome::Fulfilled)
+            }
+        }
+
+        let log: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
         let composed = Composition::new()
             .then(Recorder {
                 label: "first",
@@ -333,10 +349,22 @@ mod tests {
                 label: "second",
                 log: Rc::clone(&log),
             });
-        let mut executor = composed.wrap(DummyExecutor);
+        let mut executor = composed.wrap(RecordingInner {
+            log: Rc::clone(&log),
+        });
         executor.execute(dummy_execution()).unwrap();
 
-        // First added is outermost and observes the execution first.
-        assert_eq!(*log.borrow(), vec!["first", "second"]);
+        // Full trace: the first-added middleware is outermost — entered first, exited last; the
+        // second is nested within it; the executor is innermost.
+        assert_eq!(
+            *log.borrow(),
+            vec![
+                "first:enter",
+                "second:enter",
+                "executor",
+                "second:exit",
+                "first:exit",
+            ]
+        );
     }
 }
