@@ -1,40 +1,72 @@
-# Backlog & Roadmap
+# Backlog & Deferred Decisions
 
-This file records deferred work, future phases, and known architectural gaps. It is intentionally kept separate from the core `openspec/specs/` to ensure the specs represent only shipped, verified truth.
+This file records deferred decisions and candidate patterns. It is not a phase
+roadmap and does not create implementation commitments. Shipped truth lives in
+`openspec/specs/`; active proposed truth lives in `openspec/changes/`.
 
-## Roadmap
+## Current Baseline
 
-The overarching journey of Pacta is defined by these phases.
+- Core contract vocabulary and `Registry` lifecycle authority are shipped.
+- Pacta-native executor, middleware, policy, and driver skeletons are shipped.
+- CI, cargo-deny, rustdoc, clippy, fmt, Tianheng dependency boundaries, and
+  governance checks are shipped.
+- Product positioning and blueprint boundaries are governed by the active
+  `establish-product-vision-blueprint` change until synced.
 
-### Phase 1: Foundation (✓ Shipped)
-- Core architectural axioms defined (`AGENTS.md`).
-- Isolated `Pact` and `Registry` trait defined (`pacta-contract`) with no
-  dependency on other workspace crates.
-- Executable governance via `tianheng` (`pacta-governance`).
-- CI, cargo-deny, rustdoc, clippy, fmt, and governance gates established.
+## Candidate Pattern Areas
 
-### Phase 2: Execution Engine (✓ Skeletons Shipped)
-- Implement `pacta-driver`: The runtime loop that claims Pacts from a `Registry`
-  by `Docket` and passes them to an `Executor`. (✓ Shipped)
-- Define Pacta-native `Middleware` and `Policy` composition skeleton. (✓ Shipped)
-- Wire up optional `Tower` compatibility in an adapter-owned crate after the
-  Pacta-native runtime skeleton is stable.
+These areas may become future OpenSpec changes only after their boundary and
+extension surface are justified.
 
-### Phase 3: Conformance Suite
-- Build `pacta-conformance`: A test suite to validate `Registry` behavior across different backends.
-- Establish the baseline tests that all backends (in-memory, SQLite, Postgres, Redis) must pass.
+### Execution Composition
 
-### Phase 4: Durable Backends
-- Implement `pacta-sqlite` for single-node durability.
-- Implement `pacta-postgres` for multi-node durability.
-- Implement `pacta-redis` for high-throughput, ephemeral-ish workloads.
+- Retry, timeout, rate limit, tracing, and similar orchestration behavior.
+- Policy evaluation semantics.
+- Composition ergonomics around `Executor`.
 
-## Deferred Work (Backlog)
+Surface: execution composition.
 
-Features or concepts that are explicitly postponed until the core contract is robust:
+### Registry Conformance
 
-- **Orchestration Behavior**: Actual retry loops, backoff calculation, timeouts, and rate limiting logic within the middleware ecosystem.
+- Shared conformance tests for lifecycle behavior.
+- Backend-agnostic correctness checks.
+- In-memory or durable registry implementations.
 
-- **Dashboard / UI**: Operator visibility into the lifecycle and Tribunal is important, but comes after the core engine is proven.
-- **Complex Topologies**: Directed Acyclic Graphs (DAGs) and inter-job dependencies.
-- **Strict Exactly-Once Delivery**: Pacta guarantees at-least-once. Exactly-once is an application-level concern.
+Surface: lifecycle persistence.
+
+### Integration Boundaries
+
+- Framework or runtime adapters.
+- Transport ingress patterns.
+- External observability exports.
+
+Surface: integration boundary.
+
+Adapter examples are not core commitments. Compatibility work must stay outside
+the core unless a future spec proves a Pacta-native boundary.
+
+### Operator Review
+
+- Tribunal inspection patterns.
+- Manual review flows for exhausted pacts.
+- Minimal operational visibility.
+
+Surface: user-defined obligation or integration boundary, depending on the
+proposal.
+
+## Explicitly Deferred
+
+- Workflow DAGs and inter-obligation dependency graphs.
+- Built-in schedulers as core behavior.
+- Broad broker behavior.
+- Exactly-once delivery as a core guarantee.
+- Backend-specific business policy in the lifecycle kernel.
+
+## Prioritization
+
+Prefer changes that preserve thinness and strengthen governance:
+
+1. Protect the lifecycle kernel and domain vocabulary.
+2. Keep user obligations user-owned.
+3. Add behavior only as a governed pattern on a named extension surface.
+4. Reject backflow from adapters, benchmarks, or backend convenience into core.
