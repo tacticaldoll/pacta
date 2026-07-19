@@ -106,7 +106,7 @@ pub type Settlement = Outcome;
 /// retainer already tells a stale holder apart from the current one.
 pub trait Registry: Send + Sync {
     /// Error returned by the registry implementation.
-    type Error;
+    type Error: std::error::Error;
 
     /// Claim a pact for execution from one of the requested dockets, using `now`
     /// to set the new lease and to reclaim any pact whose lease already expired

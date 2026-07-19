@@ -18,6 +18,14 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NotHeld;
 
+impl std::fmt::Display for NotHeld {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "retainer is not the current holder of any claim")
+    }
+}
+
+impl std::error::Error for NotHeld {}
+
 enum State {
     Available,
     Held { retainer: Uuid, expiry: Timestamp },
