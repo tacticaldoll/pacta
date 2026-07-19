@@ -327,6 +327,16 @@ proposal.
   owns the policy. Bounded retry for a poison pact stays deferred to the orchestration
   cluster (in-process middleware; cross-process via opaque operational metadata the
   core never interprets).
+- A settled pact need not persist (dogfood finding from a durable consumer, 2026-07-16).
+  The `lifecycle::State` enum carries a `Settled` variant and the reference backend keeps
+  a settled pact in its store, but a real durable backend can represent "settled" by
+  **removing the row** (it becomes trivially not-claimable, and `load` of it returns
+  `None`) — a valid implementation of the only guarantee settlement owes ("a settled pact
+  is not claimable again"). So the contract and specs must **not assume a settled pact
+  persists**: `Settled` is the reference backend's representation, not a required storage
+  obligation. No contract change (removal already satisfies the guarantee); a spec-wording
+  clarity item to fold in when the async-binding specs are next touched, so a backend
+  author is not misled into persisting a settled state it would rather drop.
 - The lifecycle kernel models no heartbeat. Its directives are `Claim`, `Execute`,
   `Settle`, and `Idle` — there is no `Heartbeat` directive — so nothing in the pure
   decision machine ever extends a lease, and the reference `Driver` cannot heartbeat
