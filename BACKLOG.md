@@ -30,22 +30,25 @@ roadmap and does not create implementation commitments. Shipped truth lives in
 ## Workspace Composition
 
 The workspace stays thin. It owns the core contract, the runtime skeleton,
-governance, the conformance suite, and one dependency-free reference backend
-(`pacta-memory`). Durable or production backends are expected to live outside the
-workspace and prove themselves against `pacta-conformance`. Adding a workspace
-crate requires a justified Tianheng boundary or the coverage gate fails, and a new
-backend's justification must address why the thin library, rather than a composer,
-owns it.
+governance, the conformance suite, one dependency-free reference backend
+(`pacta-memory`), and — because the workspace publishes to crates.io — one curated
+facade crate (`pacta`) that is the published entrypoint. Durable or production
+backends are expected to live outside the workspace and prove themselves against
+`pacta-conformance`. Adding a workspace crate requires a justified Tianheng boundary
+or the coverage gate fails, and a new backend's justification must address why the
+thin library, rather than a composer, owns it. Owning the published entrypoint is a
+publisher concern the thin library legitimately holds: `pacta` is a pure re-export
+surface, governed to carry no logic, distinct from a composer's batteries-included
+convenience.
 
 ## Release Plan
 
-0.1.0 publishes to crates.io. The publishable crates are `pacta-contract`,
+0.1.0 publishes to crates.io. The publishable crates are `pacta`, `pacta-contract`,
 `pacta-executor`, `pacta-driver`, `pacta-memory`, and `pacta-conformance`;
 `pacta-governance` stays unpublished (an internal gate that depends on `tianheng`).
-A follow-on change, `establish-pacta-facade`, adds a `pacta` facade crate as the
-curated published entrypoint; it is ordered AFTER this packaging work, because the
-facade's "publisher owns the entrypoint" justification holds only once the workspace
-actually publishes.
+The `pacta` facade is the curated published entrypoint; it was added only once the
+workspace became publishable, because its "publisher owns the entrypoint"
+justification holds only when the workspace actually publishes.
 
 ## Candidate Pattern Areas
 
