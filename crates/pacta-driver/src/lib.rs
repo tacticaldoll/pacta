@@ -21,7 +21,11 @@ fn current_time() -> Timestamp {
 }
 
 /// One mechanical driver step result.
+///
+/// `#[non_exhaustive]`: a runtime-loop status may gain states (for example a future
+/// heartbeat or lapse step), so a downstream match must carry a wildcard arm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Step {
     /// No pact was available from the configured dockets.
     Idle,
@@ -32,7 +36,11 @@ pub enum Step {
 }
 
 /// Error returned by a driver step.
+///
+/// `#[non_exhaustive]`: an error enumeration grows as new failure modes appear, so a
+/// downstream match must carry a wildcard arm.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DriverError<RegistryError, ExecutorError> {
     /// Registry operation failed.
     Registry(RegistryError),
@@ -133,6 +141,7 @@ where
                             Outcome::Breached => Step::Breached,
                         })
                     }
+                    _ => unreachable!("driver handles every current kernel step result"),
                 };
             }
 
@@ -165,6 +174,7 @@ where
                     kernel.on_event(Notice::Settled);
                 }
                 Directive::Idle => return Ok(Step::Idle),
+                _ => unreachable!("driver handles every current kernel directive"),
             }
         }
     }
@@ -267,16 +277,16 @@ mod tests {
     }
 
     fn claim() -> Claim {
-        Claim {
-            pact: Pact {
-                id: Uuid::new_v4(),
-                docket: "default".to_string(),
-                kind: "example".to_string(),
-                clause: Vec::new(),
-            },
-            retainer: Retainer::new(Uuid::new_v4()),
-            lease_expiry: Timestamp::from_millis(0),
-        }
+        Claim::new(
+            Pact::new(
+                Uuid::new_v4(),
+                "default".to_string(),
+                "example".to_string(),
+                Vec::new(),
+            ),
+            Retainer::new(Uuid::new_v4()),
+            Timestamp::from_millis(0),
+        )
     }
 
     #[test]

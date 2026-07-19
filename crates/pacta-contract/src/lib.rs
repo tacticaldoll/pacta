@@ -13,7 +13,12 @@ use uuid::Uuid;
 
 /// A durable command or contract, generated from a Signal, ready to be executed.
 /// Note the deliberate absence of `attempts`, `delay`, and `priority`.
+///
+/// Construct through [`Pact::new`]; the fields stay public for reading. The type is
+/// `#[non_exhaustive]` so it can gain a field in a later minor release without a
+/// breaking change.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Pact {
     /// Stable identifier for this pact.
     pub id: Uuid,
@@ -25,11 +30,26 @@ pub struct Pact {
     pub clause: Vec<u8>,
 }
 
+impl Pact {
+    /// Build a pact from its identifier, docket, kind, and clause.
+    #[must_use]
+    pub fn new(id: Uuid, docket: String, kind: String, clause: Vec<u8>) -> Self {
+        Self {
+            id,
+            docket,
+            kind,
+            clause,
+        }
+    }
+}
+
 /// A retainer: the authority token a registry issues with a claim and validates
 /// when settling it. Authority is registry-validated — a forged identifier does not
 /// match an issued claim — not proven by the type system. Construct via
-/// [`Retainer::new`] and read the identifier via [`Retainer::id`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// [`Retainer::new`] and read the identifier via [`Retainer::id`]. Derives
+/// `PartialEq`/`Eq`/`Hash` so a durable backend can index lease state by holder
+/// identity — the orphan rule makes providing these the contract's responsibility.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Retainer(Uuid);
 
 impl Retainer {
@@ -74,7 +94,12 @@ impl Timestamp {
 }
 
 /// A claimed pact and the retainer required to settle it.
+///
+/// Construct through [`Claim::new`]; the fields stay public for reading. The type is
+/// `#[non_exhaustive]` so it can gain a field in a later minor release without a
+/// breaking change.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Claim {
     /// Pact claimed for execution.
     pub pact: Pact,
@@ -84,6 +109,25 @@ pub struct Claim {
     /// reclaimed unless the holder heartbeats first.
     pub lease_expiry: Timestamp,
 }
+
+impl Claim {
+    /// Build a claim from a pact, the settling retainer, and the lease expiry.
+    #[must_use]
+    pub fn new(pact: Pact, retainer: Retainer, lease_expiry: Timestamp) -> Self {
+        Self {
+            pact,
+            retainer,
+            lease_expiry,
+        }
+    }
+}
+
+// The lease identity must be usable as a durable-backend key; removing the derives
+// fails this build rather than silently regressing the backend contract.
+const _: fn() = || {
+    fn assert_key<T: Eq + std::hash::Hash>() {}
+    assert_key::<Retainer>();
+};
 
 /// The lifecycle outcome an execution produces for a claimed pact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,11 +202,11 @@ pub trait Registry: Send + Sync {
 /// use pacta_contract::{Claim, Outcome, Pact, Retainer, Timestamp};
 ///
 /// let mut kernel = Kernel::new();
-/// let mut available = Some(Claim {
-///     pact: Pact { id: Default::default(), docket: "demo".into(), kind: "demo".into(), clause: Vec::new() },
-///     retainer: Retainer::new(Default::default()),
-///     lease_expiry: Timestamp::from_millis(0),
-/// });
+/// let mut available = Some(Claim::new(
+///     Pact::new(Default::default(), "demo".into(), "demo".into(), Vec::new()),
+///     Retainer::new(Default::default()),
+///     Timestamp::from_millis(0),
+/// ));
 ///
 /// let result = loop {
 ///     if let Some(result) = kernel.result() {
@@ -173,6 +217,7 @@ pub trait Registry: Send + Sync {
 ///         Directive::Execute(_pact) => kernel.on_event(Notice::Executed(Outcome::Fulfilled)),
 ///         Directive::Settle(_retainer, _outcome) => kernel.on_event(Notice::Settled),
 ///         Directive::Idle => break StepResult::Idle,
+///         _ => unreachable!("driver handles every current kernel directive"),
 ///     }
 /// };
 ///
@@ -182,7 +227,11 @@ pub mod kernel {
     use crate::{Claim, Outcome, Pact, Retainer};
 
     /// An instruction the kernel issues for a runtime to perform.
+    ///
+    /// `#[non_exhaustive]`: this advanced-tier protocol may gain directives, so a
+    /// runtime's match must carry a wildcard arm.
     #[derive(Debug, Clone)]
+    #[non_exhaustive]
     pub enum Directive {
         /// Claim a pact from the runtime's configured dockets.
         Claim,
@@ -195,21 +244,29 @@ pub mod kernel {
     }
 
     /// A report a runtime feeds back after performing a [`Directive`].
+    ///
+    /// `#[non_exhaustive]`: this advanced-tier protocol may gain notices, so a
+    /// consumer's match must carry a wildcard arm.
     #[derive(Debug, Clone)]
+    #[non_exhaustive]
     pub enum Notice {
         /// Result of a claim: a claim if one was available, else none.
         Claimed(Option<Claim>),
         /// An execution produced a lifecycle outcome.
         Executed(Outcome),
-        /// An execution failed at the infrastructure level, distinct from a
-        /// deliberate breach.
+        /// The execution infrastructure failed to run the pact. The kernel decides a
+        /// breach settlement for this notice while the runtime surfaces the error.
         ExecutionFailed,
         /// A settlement was persisted.
         Settled,
     }
 
     /// The terminal result of one lifecycle step.
+    ///
+    /// `#[non_exhaustive]`: this advanced-tier protocol may gain results, so a
+    /// consumer's match must carry a wildcard arm.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[non_exhaustive]
     pub enum StepResult {
         /// No pact was available to claim.
         Idle,
@@ -305,16 +362,16 @@ pub mod kernel {
         use uuid::Uuid;
 
         fn claim() -> Claim {
-            Claim {
-                pact: Pact {
-                    id: Uuid::new_v4(),
-                    docket: "default".to_string(),
-                    kind: "example".to_string(),
-                    clause: Vec::new(),
-                },
-                retainer: Retainer::new(Uuid::new_v4()),
-                lease_expiry: Timestamp::from_millis(0),
-            }
+            Claim::new(
+                Pact::new(
+                    Uuid::new_v4(),
+                    "default".to_string(),
+                    "example".to_string(),
+                    Vec::new(),
+                ),
+                Retainer::new(Uuid::new_v4()),
+                Timestamp::from_millis(0),
+            )
         }
 
         fn drive(

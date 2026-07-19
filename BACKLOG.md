@@ -7,11 +7,18 @@ roadmap and does not create implementation commitments. Shipped truth lives in
 ## Current Baseline
 
 - Core contract vocabulary and the `Registry` lifecycle authority are shipped.
-- Pacta-native executor, middleware, policy, and driver skeletons are shipped.
+- Pacta-native executor, middleware, and driver skeletons are shipped.
 - The sans-I/O lifecycle kernel is shipped: a pure state machine that issues
   directives and absorbs notices, exposing no async and reading no clock.
+- The public surface is frozen for 0.1.0 with a deliberate, role-based
+  exhaustiveness/extensibility stance: the kernel protocol enums
+  (`Directive`/`Notice`/`StepResult`), the driver `Step`/`DriverError`, and the
+  executor `Execution` are `#[non_exhaustive]` (they grow); `Outcome` stays closed
+  (a complete settlement binary). The durable records `Pact` and `Claim` are
+  `#[non_exhaustive]` with `new` constructors so they can gain fields additively.
 - The `Retainer` proof token is encapsulated behind a constructor and accessor
-  rather than a bare public field.
+  rather than a bare public field, and derives `Eq`/`Hash` so durable backends can
+  key on the lease identity (compile-asserted).
 - The lifecycle-persistence contract is shipped: a lease model, lapse through the
   normal claim path, retainer rotation on reclaim, a heartbeat that does not
   revive a lapsed lease, and time injected into `Registry::claim` and `heartbeat`
@@ -25,8 +32,10 @@ roadmap and does not create implementation commitments. Shipped truth lives in
   `openspec/specs/`.
 - CI, cargo-deny, rustdoc, clippy, fmt, Tianheng dependency boundaries, workspace
   governance coverage, active-prose governance, the kernel async-exposure
-  reaction, the ambient-time scan on the core, and the facade reactions
-  (kernel-exclusion and re-exports-only) are shipped.
+  reaction, the ambient-time scan on the core, the core no-synchronous-I/O scan
+  (`std::io`/`fs`/`net`/`process`), the kernel no-serde forbidden-marker reaction
+  (proven to fire), and the facade reactions (kernel-exclusion and re-exports-only)
+  are shipped. The closure property of `Middleware` (that it stacks) is proven by test.
 
 ## Workspace Composition
 
@@ -59,11 +68,18 @@ extension surface are justified.
 
 ### Execution Composition
 
-- Retry, timeout, rate limit, tracing, and similar orchestration behavior.
-- Policy evaluation semantics.
+- Retry, timeout, rate limit, tracing, and similar orchestration behavior, delivered
+  as `Middleware` implementations composed onto the existing seam.
+- A `Policy` user-obligation trait, in the sense of `tower::retry::Policy` — a trait
+  the user implements and a concrete orchestration middleware consumes. It was
+  removed from 0.1.0 as an inert value type (no consumer, no reference impl) and
+  must return only co-designed with its first consuming middleware, so its method
+  set is validated by a real client rather than frozen ahead of one.
+- A stack assembler in the sense of Tower's `ServiceBuilder`, once there are
+  multiple middleware worth composing readably; premature ahead of real layers.
 - Composition ergonomics around `Executor`.
 
-Surface: execution composition.
+Surface: execution composition. These co-arrive as a cluster so each has a client.
 
 ### Durable Backends
 
@@ -141,6 +157,25 @@ proposal.
   live here; the living docs are the single source of truth for current state. Adopting
   a separate decision-record class again is an option if in-tree browsable provenance is
   later judged worth the duplication; not decided here.
+- The `Policy` value type was removed for the 0.1.0 freeze. It was public API wired to
+  nothing — an inert vocabulary marker with no consumer and no reference implementation,
+  breaking the workspace discipline that every user-obligation type ships with a consumer
+  and a validator. The orchestration seam users compose against already exists
+  (`Middleware`, the Tower `Layer`), so removal took no capability. Its correct form is a
+  user-obligation trait (Tower `retry::Policy`) that returns with its first consuming
+  middleware (see Execution Composition). Reintroducing it earlier is an option only if a
+  real client appears to validate its shape; not before.
+- `Settlement` was kept while `Policy` was removed — deliberately, not inconsistently.
+  `Settlement` is the named terminal stage of the core lifecycle (`Signal -> Pact ->
+  Claim -> Execution -> Settlement`), and its sibling stages are all types; removing it
+  would make the terminal stage the only one without a type. `Policy` named no lifecycle
+  stage. Collapsing `Settlement` into `Outcome` at the call sites is an option if the
+  alias is later judged pure noise; not decided here.
+- Exhaustiveness was frozen by role, not uniformly. `Outcome` stays closed because a
+  settlement is exactly `Fulfilled | Breached`; the growing enums are `#[non_exhaustive]`.
+  Opening `Outcome` later would be breaking and is not anticipated. Additive freeze work
+  left for post-1.0 (safe because additive): `#[must_use]` on result types, serde/derive
+  additions, and `cargo-semver-checks` against the published 0.1.0 baseline from 0.1.1 on.
 
 ## Explicitly Deferred
 
