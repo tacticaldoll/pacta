@@ -25,10 +25,6 @@ Pacta SHALL expose an executor abstraction using Pacta runtime vocabulary rather
 - **WHEN** the executor crate exposes middleware composition
 - **THEN** the middleware API accepts an executor and returns an executor without requiring Tower or HTTP types
 
-#### Scenario: Policy remains non-behavioral in the skeleton
-- **WHEN** the executor crate exposes policy vocabulary
-- **THEN** policy values do not execute retry, timeout, rate-limit, delay, or scheduling behavior
-
 #### Scenario: Tower stays outside the core executor
 - **WHEN** the core executor crate is compiled
 - **THEN** it does not require `tower` as a dependency
@@ -146,4 +142,21 @@ display them, chain them, and convert them into common error types.
 #### Scenario: A shipped backend error is a standard error
 - **WHEN** a shipped registry backend returns its error
 - **THEN** the error implements `Display` and `std::error::Error`
+
+### Requirement: Runtime Result Types Declare Their Exhaustiveness
+Pacta SHALL give each public runtime result type a deliberate exhaustiveness stance,
+chosen by whether its shape is expected to grow, so freezing at 0.1.0 is a decision
+rather than an accident. The driver's `Step` (a runtime-loop status that already
+carries a non-settlement `Idle` state and foresees further loop states) and
+`DriverError` (an open error enumeration) SHALL be `#[non_exhaustive]`, and
+`Execution` — the executor's designated input, which exists to carry future
+execution context — SHALL be `#[non_exhaustive]` while retaining its constructor.
+
+#### Scenario: Driver result enums are non-exhaustive
+- **WHEN** `Step` and `DriverError` are compiled
+- **THEN** both are `#[non_exhaustive]`, so a downstream exhaustive match requires a wildcard arm and a later added variant is not breaking
+
+#### Scenario: Execution is an extensible input seam
+- **WHEN** `Execution` gains execution-context fields in a later release
+- **THEN** downstream executors that read `Execution` continue to compile, because it is `#[non_exhaustive]` and constructed through `Execution::new`
 
