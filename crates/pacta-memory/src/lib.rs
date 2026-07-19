@@ -5,16 +5,17 @@
 //! lifecycle semantics and to calibrate against — durable backends live outside this
 //! workspace and prove themselves against `pacta-conformance` just as this one does.
 //!
-//! It is a pure lifecycle state machine that holds
-//! pacts, leases claims for a user-supplied duration, reclaims lapsed pacts through
-//! the normal claim path, and rotates the retainer on every claim so a stale holder
-//! cannot settle. It reads no clock — time is injected into `claim` and `heartbeat`.
+//! It owns only storage and retainer minting; every eligibility decision and state
+//! transition is delegated to the shared, pure [`pacta_contract::lifecycle`] kernel, so
+//! the lifecycle semantics are single-sourced and cannot drift from any other backend.
+//! It reads no clock — time is injected into `claim` and `heartbeat`.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 use std::sync::Mutex;
 
+use pacta_contract::lifecycle::{self, State};
 use pacta_contract::{Claim, Pact, Registry, Retainer, Timestamp};
 use uuid::Uuid;
 
@@ -30,19 +31,6 @@ impl std::fmt::Display for NotHeld {
 }
 
 impl std::error::Error for NotHeld {}
-
-enum State {
-    Available,
-    Held {
-        retainer: Uuid,
-        expiry: Timestamp,
-    },
-    /// Released, non-terminal: claimable again only at or after `reclaimable_at`.
-    Deferred {
-        reclaimable_at: Timestamp,
-    },
-    Settled,
-}
 
 struct Record {
     pact: Pact,
@@ -80,10 +68,26 @@ impl MemoryRegistry {
         }
     }
 
-    fn find_holder(records: &mut [Record], retainer: &Retainer) -> Option<usize> {
-        records.iter().position(|record| {
-            matches!(record.state, State::Held { retainer: held, .. } if held == retainer.id())
-        })
+    /// Apply a lifecycle transition to the one record its current holder owns: the
+    /// first record for which the transition succeeds is updated. If none succeed, no
+    /// record is held by that retainer (stale, settled, or lapsed) — `NotHeld`. The
+    /// authority check lives in the `lifecycle` kernel, not here; this only scans
+    /// storage and writes the new state.
+    fn apply_transition(
+        &self,
+        transition: impl Fn(&State) -> Result<State, lifecycle::NotCurrentHolder>,
+    ) -> Result<(), NotHeld> {
+        let mut records = self
+            .records
+            .lock()
+            .expect("registry mutex should not be poisoned");
+        for record in records.iter_mut() {
+            if let Ok(next) = transition(&record.state) {
+                record.state = next;
+                return Ok(());
+            }
+        }
+        Err(NotHeld)
     }
 }
 
@@ -95,30 +99,20 @@ impl Registry for MemoryRegistry {
             .records
             .lock()
             .expect("registry mutex should not be poisoned");
+        // Storage picks a candidate on the requested dockets; the kernel decides
+        // eligibility (available / lapsed hold / reclaimable defer / settled).
         let claimable = records.iter().position(|record| {
-            if !dockets.contains(&record.pact.docket.as_str()) {
-                return false;
-            }
-            match record.state {
-                State::Available => true,
-                // A lapse: an expired hold is reclaimable through this claim path.
-                State::Held { expiry, .. } => expiry < now,
-                // A reclaim: a released pact is claimable once its instant has passed.
-                State::Deferred { reclaimable_at } => reclaimable_at <= now,
-                State::Settled => false,
-            }
+            dockets.contains(&record.pact.docket.as_str())
+                && lifecycle::is_claimable(&record.state, now)
         });
 
-        // Mint a retainer only on a successful claim.
+        // Mint a retainer only on a successful claim; the kernel produces the held state.
         let Some(index) = claimable else {
             return Ok(None);
         };
         let retainer = Retainer::new(Uuid::new_v4());
-        let expiry = now.plus_millis(self.lease_millis);
-        records[index].state = State::Held {
-            retainer: retainer.id(),
-            expiry,
-        };
+        records[index].state = lifecycle::on_claim(&retainer, now, self.lease_millis);
+        let expiry = lifecycle::lease_expiry(now, self.lease_millis);
         Ok(Some(Claim::new(
             records[index].pact.clone(),
             retainer,
@@ -127,61 +121,22 @@ impl Registry for MemoryRegistry {
     }
 
     fn heartbeat(&self, retainer: &Retainer, now: Timestamp) -> Result<(), Self::Error> {
-        let mut records = self
-            .records
-            .lock()
-            .expect("registry mutex should not be poisoned");
-        let index = Self::find_holder(&mut records, retainer).ok_or(NotHeld)?;
-        let State::Held { expiry, .. } = records[index].state else {
-            return Err(NotHeld);
-        };
-        // Refuse to revive a lapsed lease: the holder must re-claim.
-        if expiry < now {
-            return Err(NotHeld);
-        }
-        records[index].state = State::Held {
-            retainer: retainer.id(),
-            expiry: now.plus_millis(self.lease_millis),
-        };
-        Ok(())
+        self.apply_transition(|state| {
+            lifecycle::on_heartbeat(state, retainer, now, self.lease_millis)
+        })
     }
 
     fn fulfill(&self, retainer: &Retainer) -> Result<(), Self::Error> {
-        self.settle(retainer)
+        // fulfill and breach share the same lifecycle transition: the pact concludes.
+        self.apply_transition(|state| lifecycle::on_settle(state, retainer))
     }
 
     fn breach(&self, retainer: &Retainer) -> Result<(), Self::Error> {
-        self.settle(retainer)
+        self.apply_transition(|state| lifecycle::on_settle(state, retainer))
     }
 
     fn release(&self, retainer: &Retainer, reclaimable_at: Timestamp) -> Result<(), Self::Error> {
-        let mut records = self
-            .records
-            .lock()
-            .expect("registry mutex should not be poisoned");
-        // Only the current holder may release; a settled or non-held pact has no
-        // current holder, so this rejects settled-release and stale retainers alike —
-        // the same authority check as fulfill and breach.
-        let index = Self::find_holder(&mut records, retainer).ok_or(NotHeld)?;
-        // Non-terminal: drop the hold (rotating authority away from this retainer) and
-        // set the reclaimable instant. The core honors the injected instant; it computes
-        // no delay.
-        records[index].state = State::Deferred { reclaimable_at };
-        Ok(())
-    }
-}
-
-impl MemoryRegistry {
-    // fulfill and breach share the same authority check: a stale retainer no longer
-    // matches the rotated current holder, so no time is needed to reject it.
-    fn settle(&self, retainer: &Retainer) -> Result<(), NotHeld> {
-        let mut records = self
-            .records
-            .lock()
-            .expect("registry mutex should not be poisoned");
-        let index = Self::find_holder(&mut records, retainer).ok_or(NotHeld)?;
-        records[index].state = State::Settled;
-        Ok(())
+        self.apply_transition(|state| lifecycle::on_release(state, retainer, reclaimable_at))
     }
 }
 

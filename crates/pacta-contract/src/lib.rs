@@ -142,6 +142,231 @@ pub enum Outcome {
 /// [`Outcome`].
 pub type Settlement = Outcome;
 
+/// The pure lifecycle state machine every `Registry` backend composes over.
+///
+/// This is the single source of the pact lifecycle *semantics* — the claim-eligibility
+/// predicate, the state transitions, the current-holder authority check, and the lease
+/// arithmetic. A backend owns its own storage and mints its own retainer (a fencing
+/// value); it delegates every eligibility decision and transition here, so the semantics
+/// are defined once and cannot drift between backends (or between a synchronous and a
+/// future asynchronous binding).
+///
+/// It is colorless and sans-I/O: it reads no clock (time is an injected parameter),
+/// performs no I/O, and mints nothing non-deterministic (the retainer is supplied by the
+/// caller). Named `lifecycle` to distinguish it from the executor step-driver
+/// [`kernel`], which is a different pure machine.
+pub mod lifecycle {
+    use crate::{Retainer, Timestamp};
+
+    /// A pact's position in its claim lifecycle: the pure state a backend stores per
+    /// pact. The backend owns where it lives; this owns what it means.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub enum State {
+        /// Never claimed, or freshly seeded: immediately claimable.
+        Available,
+        /// Held under a lease by `retainer` until `expiry`. Claimable again only once
+        /// the lease has lapsed (`expiry < now`), which rotates authority away.
+        Held {
+            /// The current holder's authority token.
+            retainer: Retainer,
+            /// When the lease expires.
+            expiry: Timestamp,
+        },
+        /// Released non-terminally: claimable again only at or after `reclaimable_at`.
+        Deferred {
+            /// The instant at or after which the pact may be reclaimed.
+            reclaimable_at: Timestamp,
+        },
+        /// Concluded (fulfilled or breached): never claimable again.
+        Settled,
+    }
+
+    /// A transition was attempted by something that is not the state's current holder —
+    /// a stale retainer, or a state (available, deferred, settled) with no holder at all.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct NotCurrentHolder;
+
+    impl std::fmt::Display for NotCurrentHolder {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "retainer is not the current holder of this pact")
+        }
+    }
+
+    impl std::error::Error for NotCurrentHolder {}
+
+    /// The lease expiry for a claim taken at `now` for `lease_millis` — the single
+    /// source of the lease arithmetic.
+    #[must_use]
+    pub fn lease_expiry(now: Timestamp, lease_millis: u64) -> Timestamp {
+        now.plus_millis(lease_millis)
+    }
+
+    /// Whether a pact in `state` may be claimed at `now`: the eligibility invariant.
+    /// `Available` always; a `Held` lease that has lapsed; a `Deferred` pact at or past
+    /// its instant; never a `Settled` one. Only positive, unambiguous eligibility.
+    #[must_use]
+    pub fn is_claimable(state: &State, now: Timestamp) -> bool {
+        match state {
+            State::Available => true,
+            State::Held { expiry, .. } => *expiry < now,
+            State::Deferred { reclaimable_at } => *reclaimable_at <= now,
+            State::Settled => false,
+        }
+    }
+
+    /// The state a successful claim produces: `Held` by `retainer` until the lease
+    /// expiry for `now`/`lease_millis`. The backend mints `retainer` and passes it in.
+    #[must_use]
+    pub fn on_claim(retainer: &Retainer, now: Timestamp, lease_millis: u64) -> State {
+        State::Held {
+            retainer: retainer.clone(),
+            expiry: lease_expiry(now, lease_millis),
+        }
+    }
+
+    /// The state a heartbeat produces: the lease extended to the expiry for
+    /// `now`/`lease_millis`, provided `retainer` currently holds `state` and the lease
+    /// has not already lapsed. A lapsed lease is not revived — the holder must re-claim.
+    pub fn on_heartbeat(
+        state: &State,
+        retainer: &Retainer,
+        now: Timestamp,
+        lease_millis: u64,
+    ) -> Result<State, NotCurrentHolder> {
+        match state {
+            State::Held {
+                retainer: held,
+                expiry,
+            } if held == retainer && *expiry >= now => Ok(State::Held {
+                retainer: retainer.clone(),
+                expiry: lease_expiry(now, lease_millis),
+            }),
+            _ => Err(NotCurrentHolder),
+        }
+    }
+
+    /// The state a settlement produces: `Settled`, provided `retainer` currently holds
+    /// `state`. Fulfill and breach share this — the lifecycle state records that the
+    /// obligation concluded, not which outcome concluded it.
+    pub fn on_settle(state: &State, retainer: &Retainer) -> Result<State, NotCurrentHolder> {
+        if is_current_holder(state, retainer) {
+            Ok(State::Settled)
+        } else {
+            Err(NotCurrentHolder)
+        }
+    }
+
+    /// The state a release produces: `Deferred` until `reclaimable_at`, provided
+    /// `retainer` currently holds `state`. Non-terminal; rotates authority away.
+    pub fn on_release(
+        state: &State,
+        retainer: &Retainer,
+        reclaimable_at: Timestamp,
+    ) -> Result<State, NotCurrentHolder> {
+        if is_current_holder(state, retainer) {
+            Ok(State::Deferred { reclaimable_at })
+        } else {
+            Err(NotCurrentHolder)
+        }
+    }
+
+    fn is_current_holder(state: &State, retainer: &Retainer) -> bool {
+        matches!(state, State::Held { retainer: held, .. } if held == retainer)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use uuid::Uuid;
+
+        fn retainer() -> Retainer {
+            Retainer::new(Uuid::new_v4())
+        }
+
+        #[test]
+        fn eligibility_covers_each_state() {
+            let now = Timestamp::from_millis(100);
+            assert!(is_claimable(&State::Available, now));
+            // A held lease is claimable only once lapsed.
+            assert!(!is_claimable(
+                &State::Held {
+                    retainer: retainer(),
+                    expiry: Timestamp::from_millis(101)
+                },
+                now
+            ));
+            assert!(is_claimable(
+                &State::Held {
+                    retainer: retainer(),
+                    expiry: Timestamp::from_millis(99)
+                },
+                now
+            ));
+            // A deferred pact is claimable at or past its instant.
+            assert!(!is_claimable(
+                &State::Deferred {
+                    reclaimable_at: Timestamp::from_millis(101)
+                },
+                now
+            ));
+            assert!(is_claimable(
+                &State::Deferred {
+                    reclaimable_at: Timestamp::from_millis(100)
+                },
+                now
+            ));
+            assert!(!is_claimable(&State::Settled, now));
+        }
+
+        #[test]
+        fn transitions_require_the_current_holder() {
+            let holder = retainer();
+            let held = State::Held {
+                retainer: holder.clone(),
+                expiry: Timestamp::from_millis(200),
+            };
+            let stranger = retainer();
+
+            assert_eq!(on_settle(&held, &stranger), Err(NotCurrentHolder));
+            assert_eq!(
+                on_release(&held, &stranger, Timestamp::from_millis(0)),
+                Err(NotCurrentHolder)
+            );
+            assert_eq!(on_settle(&State::Settled, &holder), Err(NotCurrentHolder));
+
+            assert_eq!(on_settle(&held, &holder), Ok(State::Settled));
+            assert_eq!(
+                on_release(&held, &holder, Timestamp::from_millis(500)),
+                Ok(State::Deferred {
+                    reclaimable_at: Timestamp::from_millis(500)
+                })
+            );
+        }
+
+        #[test]
+        fn heartbeat_refreshes_but_does_not_revive_a_lapsed_lease() {
+            let holder = retainer();
+            let held = State::Held {
+                retainer: holder.clone(),
+                expiry: Timestamp::from_millis(200),
+            };
+            // Live lease refreshes.
+            assert_eq!(
+                on_heartbeat(&held, &holder, Timestamp::from_millis(150), 100),
+                Ok(State::Held {
+                    retainer: holder.clone(),
+                    expiry: Timestamp::from_millis(250)
+                })
+            );
+            // Lapsed lease is not revived.
+            assert_eq!(
+                on_heartbeat(&held, &holder, Timestamp::from_millis(201), 100),
+                Err(NotCurrentHolder)
+            );
+        }
+    }
+}
+
 /// The Registry manages the lifecycle of Pacts. It is a pure state machine.
 ///
 /// Time is injected: [`claim`](Registry::claim) and
