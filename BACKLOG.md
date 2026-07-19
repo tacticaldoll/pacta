@@ -100,6 +100,16 @@ proposal.
   recover, an infrastructure failure could leave the claim unsettled so it lapses
   and is reclaimed, rather than being terminally breached as it is today. Recorded
   for a future proposal; not decided here.
+- The lifecycle kernel models no heartbeat. Its directives are `Claim`, `Execute`,
+  `Settle`, and `Idle` — there is no `Heartbeat` directive — so nothing in the pure
+  decision machine ever extends a lease, and the reference `Driver` cannot heartbeat
+  a claim in flight. This is distinct from the deferred *cadence* question below
+  (how often to heartbeat stays user/runtime policy regardless): the fork here is
+  structural — whether the kernel should model *that* a heartbeat may occur (e.g. a
+  `Heartbeat` directive the runtime performs on a tick, keeping cadence out of the
+  core). A sans-I/O-pure version of this collides with the synchronous `Executor`
+  (which cannot yield to be heartbeated mid-execution), so it pulls at the sync/async
+  seam. Recorded as a future fork; not decided here.
 
 ## Explicitly Deferred
 
