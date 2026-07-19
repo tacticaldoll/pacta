@@ -34,8 +34,14 @@ roadmap and does not create implementation commitments. Shipped truth lives in
   governance coverage, active-prose governance, the kernel async-exposure
   reaction, the ambient-time scan on the core, the core no-synchronous-I/O scan
   (`std::io`/`fs`/`net`/`process`), the kernel no-serde forbidden-marker reaction
-  (proven to fire), and the facade reactions (kernel-exclusion and re-exports-only)
-  are shipped. The closure property of `Middleware` (that it stacks) is proven by test.
+  (proven to fire), the facade reactions (kernel-exclusion and re-exports-only), and the
+  executor orchestration-vocabulary reaction (proven to fire) are shipped.
+- Middleware composition is reified: `Identity` (the empty stack), `Stack` (the closure
+  property as a holdable value, proven by test), and `Composition` (a blind assembler with a
+  single generic `then` and no named policy method). This ships the stack assembler previously
+  deferred below as "premature ahead of real layers": a composition *mechanism* earns its place
+  by its own soundness under the pattern-admission guardrail — Pacta leads with patterns and
+  consumers do not gate it — distinct from concrete orchestration *policy*, which stays deferred.
 
 ## Workspace Composition
 
@@ -75,9 +81,8 @@ extension surface are justified.
   removed from 0.1.0 as an inert value type (no consumer, no reference impl) and
   must return only co-designed with its first consuming middleware, so its method
   set is validated by a real client rather than frozen ahead of one.
-- A stack assembler in the sense of Tower's `ServiceBuilder`, once there are
-  multiple middleware worth composing readably; premature ahead of real layers.
-- Composition ergonomics around `Executor`.
+- Further composition ergonomics around `Executor` beyond the shipped `Identity`/`Stack`/
+  `Composition` mechanism (the blind assembler itself is now shipped — see Current Baseline).
 
 Surface: execution composition. These co-arrive as a cluster so each has a client.
 
