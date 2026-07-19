@@ -13,11 +13,10 @@ The overarching journey of Pacta is defined by these phases.
 - Executable governance via `tianheng` (`pacta-governance`).
 - CI, cargo-deny, rustdoc, clippy, fmt, and governance gates established.
 
-### Phase 2: Execution Engine
+### Phase 2: Execution Engine (✓ Skeletons Shipped)
 - Implement `pacta-driver`: The runtime loop that claims Pacts from a `Registry`
-  by `Docket` and passes them to an `Executor`.
-- Define Pacta-native `Middleware` and `Policy` layers for orchestration
-  (Retries, Timeouts, Rate Limiting).
+  by `Docket` and passes them to an `Executor`. (✓ Shipped)
+- Define Pacta-native `Middleware` and `Policy` composition skeleton. (✓ Shipped)
 - Wire up optional `Tower` compatibility in an adapter-owned crate after the
   Pacta-native runtime skeleton is stable.
 
@@ -33,6 +32,8 @@ The overarching journey of Pacta is defined by these phases.
 ## Deferred Work (Backlog)
 
 Features or concepts that are explicitly postponed until the core contract is robust:
+
+- **Orchestration Behavior**: Actual retry loops, backoff calculation, timeouts, and rate limiting logic within the middleware ecosystem.
 
 - **Dashboard / UI**: Operator visibility into the lifecycle and Tribunal is important, but comes after the core engine is proven.
 - **Complex Topologies**: Directed Acyclic Graphs (DAGs) and inter-job dependencies.
