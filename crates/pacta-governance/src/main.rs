@@ -21,7 +21,7 @@ const CORE_NO_IO_REASON: &str = "the sans-I/O core contract performs no I/O: no 
 const MEMORY_REASON: &str = "pacta-memory is a registry backend outside the core. It may depend only on pacta-contract and uuid, never on drivers, executors, or other backends.";
 const CONTRACT_ASYNC_REASON: &str = "pacta-contract-async is the async binding of the frozen Registry contract. It may depend only on pacta-contract (the value types and the shared lifecycle kernel) and async-trait, never on a runtime, a backend, or another workspace crate — so the async surface stays isolated and sync-only consumers never pull it.";
 const MEMORY_ASYNC_REASON: &str = "pacta-memory-async is the reference async registry backend. It may depend only on pacta-contract, pacta-contract-async, async-trait, and uuid, never on drivers, executors, or other backends.";
-const CONFORMANCE_REASON: &str = "pacta-conformance is a backend-agnostic test suite. It may depend only on pacta-contract and uuid, never on a specific backend.";
+const CONFORMANCE_REASON: &str = "pacta-conformance is a backend-agnostic test suite. It may depend only on the contract bindings it verifies — pacta-contract and, optionally, pacta-contract-async (the async binding) — plus uuid, never on a specific backend.";
 const PROSE_REASON: &str =
     "active prose must not reintroduce stale architecture-defining vocabulary";
 const AMBIENT_TIME_REASON: &str =
@@ -148,7 +148,7 @@ fn constitution() -> Constitution {
         )
         .boundary(
             CrateBoundary::crate_("pacta-conformance")
-                .restrict_dependencies_to(["pacta-contract", "uuid"])
+                .restrict_dependencies_to(["pacta-contract", "pacta-contract-async", "uuid"])
                 .because(CONFORMANCE_REASON),
         )
         .boundary(

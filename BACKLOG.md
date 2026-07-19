@@ -182,10 +182,13 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
     mirror-port). Decided and planned; **not yet an active change** — open the change
     (and the step-1 spike may run independently) when pacta work is scheduled.
   - **Landed toward 0.1.3:** the `lifecycle` kernel (single-sourced semantics),
-    `pacta-contract-async` (the `AsyncRegistry` binding), and `pacta-memory-async`
-    (the reference async backend). Still pending: the shared async conformance runner
-    (deferred until worklane's rebind forces it — decide scenario-data-refactor vs
-    `maybe-async` then), and the `claim_select` throughput spike (worklane side).
+    `pacta-contract-async` (the `AsyncRegistry` binding), `pacta-memory-async`
+    (the reference async backend), and — via `add-async-conformance` — the shared async
+    conformance runner: pacta proves its own contract against its own reference backend, on its
+    own authority. A consumer *ignites* the async work; it does not *gate* it (the earlier
+    "deferred until worklane's rebind forces it" framing inverted that, and is dropped). Still
+    pending, and consumer-side rather than a pacta gate: the `claim_select` throughput spike
+    (worklane side, a real durable backend under contention).
   - **Fence-rule divergence: pacta contract vs worklane (a worklane-rebind finding, not a
     pacta change).** pacta's lifecycle fences settlement on **reclaim**, not on expiry: a
     holder whose lease has lapsed but whose pact **nobody has reclaimed yet** can still
@@ -243,15 +246,17 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
     in `pacta-conformance` — pin it for whichever fence wins. (The release-on-lapsed case is
     already covered: `released_pact_withheld_until_reclaimable` asserts withholding at `at(3000)`,
     past the original lease.)
-  - **Re-scope the async-conformance gate.** `pacta-conformance` is not single-source scenario
-    *data* — it is 16 imperative `fn<R: Registry>` bodies bound to the *sync* trait. So "add a
-    thin async runner" is not available: the honest options are a `block_on` shim (thin, one copy,
-    but tests the async backend *synchronously* — proves state-machine parity, not real async/
-    concurrency) or duplicated/macro'd async scenarios (real async path, but reintroduces the
-    sync/async drift the design set out to kill). The "sync and async cannot drift" guarantee is
-    structural only for the shared `lifecycle` kernel, **not** for scenario coverage. Decide
-    block_on-vs-duplicate when the runner is actually built (worklane-forced), and do not call the
-    async binding "proven" until it exists in the chosen form.
+  - **Async-conformance gate — resolved by `add-async-conformance`.** `pacta-conformance` is not
+    single-source scenario *data* — it is 16 imperative `fn<R: Registry>` bodies bound to the *sync*
+    trait, so a "thin async runner over shared data" was never available. The runner does not
+    duplicate the bodies: it adapts an `AsyncRegistry` into the sync `Registry` via a `block_on` and
+    runs the **existing** bodies verbatim (`run_async`), so there is exactly one scenario set and
+    coverage cannot drift. That resolves the block_on-vs-duplicate fork in favor of block_on: it
+    proves state-machine parity — the same bar the sync suite meets, which exercises no concurrency
+    either. The one property `block_on` cannot reach — the `load`/`cas` interleaving the async
+    decomposition introduces and the sync fat-verb shape lacks — is covered by a separate
+    multi-threaded contention test against the reference backend. The async binding is therefore
+    proven at parity **and** its own race, on pacta's authority, not deferred to worklane's.
   - **Version-cadence isolation — delivered (not just claimed).** The async crates carry
     their **own version line** (`pacta-contract-async` / `pacta-memory-async` at `0.1.0`),
     off the workspace lockstep, so the async surface can evolve — even break at `0.x` —

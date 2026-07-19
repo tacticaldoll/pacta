@@ -65,6 +65,89 @@ where
     heartbeat_unknown_retainer_rejected(&make);
 }
 
+/// Async conformance: hold an [`AsyncRegistry`](pacta_contract_async::AsyncRegistry) backend to the
+/// exact same scenarios as the sync suite.
+///
+/// The async runner reuses [`run`] rather than a duplicated scenario set: it adapts the async
+/// backend into the sync [`Registry`] by driving each operation to completion, so sync and async
+/// coverage cannot drift. This proves state-machine parity — the same bar the sync suite meets, which
+/// itself exercises no concurrency; concurrent contention on the async binding's `load`/`cas`
+/// decomposition is a separate, backend-side proof.
+///
+/// The adapter drives futures with a poll loop, so it fits backends whose futures make progress
+/// without an external reactor (the in-memory reference backend); a real-reactor durable backend
+/// proves itself against the same scenarios through its own async harness.
+#[cfg(feature = "async")]
+mod async_runner {
+    use core::future::Future;
+
+    use pacta_contract::{Claim, Pact, Registry, Retainer, Timestamp};
+    use pacta_contract_async::AsyncRegistry;
+
+    /// Drive a future to completion on the current thread with a no-op waker. Correct for futures
+    /// that make progress without an external reactor; keeps the crate dependency- and unsafe-free.
+    fn block_on<F: Future>(future: F) -> F::Output {
+        use core::task::{Context, Poll};
+
+        let mut future = core::pin::pin!(future);
+        let mut cx = Context::from_waker(core::task::Waker::noop());
+        loop {
+            match future.as_mut().poll(&mut cx) {
+                Poll::Ready(output) => return output,
+                Poll::Pending => core::hint::spin_loop(),
+            }
+        }
+    }
+
+    /// Adapts an [`AsyncRegistry`] into the sync [`Registry`] by blocking on each operation, so the
+    /// async binding runs the sync suite verbatim.
+    struct BlockOn<R>(R);
+
+    impl<R: AsyncRegistry> Registry for BlockOn<R> {
+        type Error = R::Error;
+
+        fn claim(&self, dockets: &[&str], now: Timestamp) -> Result<Option<Claim>, Self::Error> {
+            block_on(self.0.claim(dockets, now))
+        }
+
+        fn heartbeat(&self, retainer: &Retainer, now: Timestamp) -> Result<(), Self::Error> {
+            block_on(self.0.heartbeat(retainer, now))
+        }
+
+        fn fulfill(&self, retainer: &Retainer) -> Result<(), Self::Error> {
+            block_on(self.0.fulfill(retainer))
+        }
+
+        fn breach(&self, retainer: &Retainer) -> Result<(), Self::Error> {
+            block_on(self.0.breach(retainer))
+        }
+
+        fn release(
+            &self,
+            retainer: &Retainer,
+            reclaimable_at: Timestamp,
+        ) -> Result<(), Self::Error> {
+            block_on(self.0.release(retainer, reclaimable_at))
+        }
+    }
+
+    /// Run the full conformance suite against an async backend built by `make`.
+    ///
+    /// `make(pacts, lease_millis)` returns a fresh async registry seeded with `pacts`, exactly as
+    /// [`run`](crate::run) expects for the sync binding.
+    pub fn run_async<R, F>(make: F)
+    where
+        R: AsyncRegistry,
+        R::Error: core::fmt::Debug,
+        F: Fn(Vec<Pact>, u64) -> R,
+    {
+        crate::run(move |pacts, lease_millis| BlockOn(make(pacts, lease_millis)));
+    }
+}
+
+#[cfg(feature = "async")]
+pub use async_runner::run_async;
+
 fn no_available_pact_returns_none<R, F>(make: &F)
 where
     R: Registry,
