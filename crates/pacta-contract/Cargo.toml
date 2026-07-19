@@ -1,0 +1,11 @@
+[package]
+name = "pacta-contract"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The zero-dependency core contract for the Pacta task runtime."
+publish = false
+
+[dependencies]
+serde.workspace = true
+uuid.workspace = true
