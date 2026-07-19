@@ -45,7 +45,8 @@ convenience.
 
 0.1.0 publishes to crates.io. The publishable crates are `pacta`, `pacta-contract`,
 `pacta-executor`, `pacta-driver`, `pacta-memory`, and `pacta-conformance`;
-`pacta-governance` stays unpublished (an internal gate that depends on `tianheng`).
+`pacta-governance` stays unpublished (an internal gate that depends on `tianheng`
+and its `guibiao` coverage core).
 The `pacta` facade is the curated published entrypoint; it was added only once the
 workspace became publishable, because its "publisher owns the entrypoint"
 justification holds only when the workspace actually publishes.
