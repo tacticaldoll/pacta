@@ -67,6 +67,16 @@ where
 }
 
 /// Mechanical loop that performs the directives the sans-I/O kernel issues.
+///
+/// This is a **reference** runtime skeleton. It drives one step synchronously —
+/// claim, execute, settle — and never heartbeats or reclaims within a step: it does
+/// not extend a lease while its executor runs (so a long task's lease can *expire*
+/// mid-step), and it settles by matching the retainer rather than re-claiming. It is
+/// therefore safe for tasks shorter than the lease (the lease never expires mid-step)
+/// and for single-worker use (no concurrent claimer can *reclaim* an expired lease
+/// mid-step). A workload that is both long-running *and* multi-worker should compose
+/// its own loop over the [`Registry`] contract (which includes `heartbeat`); the
+/// lifecycle kernel deliberately models no in-flight heartbeat.
 pub struct Driver<R, E> {
     registry: R,
     executor: E,
