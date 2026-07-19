@@ -6,14 +6,14 @@ Meta-guideline for any AI coding agent working in this repository. **Read this f
 
 `Pacta` is a Tower-native, Middleware-driven task runtime. It operates under a strict minimalist philosophy, contrasting heavily with legacy job queues that bloat their storage layers. Before proposing or writing any code, internalize these axioms:
 
-1. **Zero-Dependency Contract**: The `pacta-contract` crate is the sole source of truth. It defines the `Store` trait and the `Pact` envelope. It must NEVER depend on business logic crates (e.g., `tokio`, `tower`, routing logic). It is purely a data and state interface.
-2. **Pure State Machine (Store is Lifecycle)**: The `Store` manages only four actions: `reserve`, `ack`, `nack`, and `heartbeat`. Concepts like retry attempts, visibility delay, topic routing, cron scheduling, and dead-letter payloads are strictly forbidden from the `Store` trait and the `Pact` struct. The Store does not do business logic.
-3. **Execution is Composition**: All execution orchestration must be implemented as `&self` Middleware layers. Retries, timeouts, rate limiting, and observability belong in the Handler stack, entirely decoupled from the Store. 
+1. **Zero-Dependency Contract**: The `pacta-contract` crate is the sole source of truth. It defines the `Registry` trait and the `Pact` envelope. It must NEVER depend on business logic crates (e.g., `tokio`, `tower`, routing logic). It is purely a data and state interface.
+2. **Pure State Machine (Registry is Lifecycle)**: The `Registry` manages only four actions: `claim`, `fulfill`, `breach`, and `heartbeat`. Concepts like retry attempts, visibility delay, topic routing, cron scheduling, and dead-letter clauses are strictly forbidden from the `Registry` trait and the `Pact` struct. The Registry does not do business logic.
+3. **Execution is Composition**: All execution orchestration must be implemented as `&self` Middleware layers. Retries, timeouts, rate limiting, and observability belong in the Handler stack, entirely decoupled from the Registry. 
 
 ## Adversarial Review Stance
 
 When reading proposals or reviewing code, adopt an adversarial stance. You must actively challenge the design:
-- **Propose Phase**: Does this proposal leak business logic into the Store? Could this be solved purely with a Middleware layer instead? If a feature violates the three axioms, it must be rejected or redesigned as a Middleware.
+- **Propose Phase**: Does this proposal leak business logic into the Registry? Could this be solved purely with a Middleware layer instead? If a feature violates the three axioms, it must be rejected or redesigned as a Middleware.
 - **Apply Phase**: Does the implementation bloat the core schema? Have we maintained absolute zero-dependency isolation in the contract? Assume the code is bloating the system until proven otherwise.
 
 ## OpenSpec Workflow
