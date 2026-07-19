@@ -1,0 +1,20 @@
+[package]
+name = "pacta"
+description = "Curated entrypoint for Pacta: a thin, durable lifecycle contract you compose."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[dependencies]
+pacta-contract.workspace = true
+pacta-executor.workspace = true
+pacta-driver.workspace = true
+
+[dev-dependencies]
+uuid.workspace = true

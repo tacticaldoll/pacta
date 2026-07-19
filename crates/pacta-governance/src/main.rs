@@ -21,6 +21,14 @@ const PROSE_REASON: &str =
     "active prose must not reintroduce stale architecture-defining vocabulary";
 const AMBIENT_TIME_REASON: &str =
     "the core contract must read no ambient clock; time is injected at the Registry seam";
+const FACADE_REASON: &str = "pacta is the curated published entrypoint. It may depend only on pacta-contract, pacta-executor, and pacta-driver, never on a backend or external framework.";
+const FACADE_KERNEL_REASON: &str = "the pacta facade is the compose-level surface: it must not re-export the sans-I/O kernel, which stays advanced-only and is reached through pacta-contract directly.";
+const FACADE_REEXPORT_REASON: &str =
+    "the pacta facade must stay a pure re-export entrypoint and hold no logic of its own";
+const FACADE_NON_REEXPORT: &str = "non-re-export item in facade library";
+
+/// The facade source tree the re-exports-only scan guards, relative to the workspace root.
+const FACADE_SOURCE_DIR: &str = "crates/pacta/src";
 
 /// Current-time constructors forbidden inside the core contract. `pacta-contract`
 /// is allowed `uuid`, so the scan must catch uuid's clock constructors too, not
@@ -134,11 +142,22 @@ fn constitution() -> Constitution {
                 .restrict_dependencies_to(["pacta-contract", "uuid"])
                 .because(CONFORMANCE_REASON),
         )
+        .boundary(
+            CrateBoundary::crate_("pacta")
+                .restrict_dependencies_to(["pacta-contract", "pacta-executor", "pacta-driver"])
+                .because(FACADE_REASON),
+        )
         .async_exposure_boundary(
             AsyncExposureBoundary::in_crate("pacta-contract")
                 .module("crate::kernel")
                 .must_not_expose_async_fn()
                 .because(KERNEL_ASYNC_REASON),
+        )
+        .signature_boundary(
+            SemanticBoundary::in_crate("pacta")
+                .module("crate")
+                .must_not_expose("pacta_contract::kernel")
+                .because(FACADE_KERNEL_REASON),
         )
 }
 
@@ -165,6 +184,17 @@ fn main() -> ExitCode {
 
         if let Err(violations) = check_no_ambient_time(&root) {
             eprintln!("pacta ambient-time governance failed: {AMBIENT_TIME_REASON}");
+            for violation in violations {
+                eprintln!(
+                    "{}:{}: `{}`",
+                    violation.path, violation.line, violation.marker
+                );
+            }
+            return ExitCode::from(1);
+        }
+
+        if let Err(violations) = check_facade_reexports_only(&root) {
+            eprintln!("pacta facade governance failed: {FACADE_REEXPORT_REASON}");
             for violation in violations {
                 eprintln!(
                     "{}:{}: `{}`",
@@ -292,6 +322,74 @@ fn check_source_content(path: &str, content: &str) -> Vec<SourceViolation> {
     violations
 }
 
+fn check_facade_reexports_only(root: &Path) -> Result<(), Vec<SourceViolation>> {
+    let mut violations = Vec::new();
+
+    for file in collect_rs_files(&root.join(FACADE_SOURCE_DIR)) {
+        let Ok(content) = fs::read_to_string(&file) else {
+            continue;
+        };
+        let relative = file
+            .strip_prefix(root)
+            .unwrap_or(&file)
+            .to_string_lossy()
+            .into_owned();
+        violations.extend(check_facade_content(&relative, &content));
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(violations)
+    }
+}
+
+/// A brace-depth-aware line scan: at brace depth zero, the facade library may hold
+/// only re-exports, `use` imports, attributes, and comments. Any other item
+/// (a `fn`, `struct`, `impl`, `const`, ...) is logic the facade must not carry. It
+/// is deliberately a line scan, not a parser: `pacta-governance` may depend only on
+/// `tianheng`, so it cannot pull in `syn`. A logic item co-located on a `pub use`
+/// line (`pub use X; pub const Y = 1;`) escapes this line heuristic, but the DoD
+/// `cargo fmt --all --check` gate splits it onto its own line, where this scan then
+/// catches it.
+fn check_facade_content(path: &str, content: &str) -> Vec<SourceViolation> {
+    let mut violations = Vec::new();
+    let mut depth: i32 = 0;
+
+    for (index, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+        let is_comment = trimmed.starts_with("//");
+
+        // A line inside a multi-line `pub use { ... }` block is a re-export
+        // continuation; only judge lines that start a fresh item at depth zero.
+        if depth == 0
+            && !trimmed.is_empty()
+            && !is_comment
+            && !trimmed.starts_with('#')
+            && !trimmed.starts_with("pub use ")
+            && !trimmed.starts_with("use ")
+        {
+            violations.push(SourceViolation {
+                path: path.to_owned(),
+                line: index + 1,
+                marker: FACADE_NON_REEXPORT,
+            });
+        }
+
+        // Track brace depth off code lines only, so a brace inside a doc comment
+        // does not desynchronize the scan.
+        if !is_comment {
+            depth += line.matches('{').count() as i32;
+            depth -= line.matches('}').count() as i32;
+            if depth < 0 {
+                depth = 0;
+            }
+        }
+    }
+
+    violations
+}
+
 fn collect_rs_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
 
@@ -354,6 +452,15 @@ pacta-executor = { path = "../pacta-executor" }
         workspace.write_package("pacta-governance", "");
         workspace.write_package("pacta-memory", "");
         workspace.write_package("pacta-conformance", "");
+        workspace.write_package(
+            "pacta",
+            r#"
+[dependencies]
+pacta-contract = { path = "../pacta-contract" }
+pacta-executor = { path = "../pacta-executor" }
+pacta-driver = { path = "../pacta-driver" }
+"#,
+        );
         workspace.write_root_manifest();
 
         let outcome = check(
@@ -410,6 +517,49 @@ pacta-executor = { path = "../pacta-executor" }
                 "pub fn from_millis(ms: u64) -> Self { Self(ms) }\n"
             )
             .is_empty()
+        );
+    }
+
+    #[test]
+    fn current_facade_is_reexports_only() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+
+        assert_eq!(check_facade_reexports_only(&root), Ok(()));
+    }
+
+    #[test]
+    fn facade_reexports_and_comments_are_allowed() {
+        let content = "\
+//! Facade docs.
+#![forbid(unsafe_code)]
+
+pub use pacta_contract::{Claim, Pact};
+pub use pacta_driver::{
+    Driver,
+    Step,
+};
+";
+        assert!(check_facade_content("lib.rs", content).is_empty());
+    }
+
+    #[test]
+    fn facade_logic_item_is_rejected() {
+        assert_eq!(
+            check_facade_content("lib.rs", "pub fn helper() {}\n"),
+            vec![SourceViolation {
+                path: "lib.rs".to_owned(),
+                line: 1,
+                marker: FACADE_NON_REEXPORT,
+            }]
+        );
+        // A struct declaration inside the facade is logic, not a re-export.
+        assert_eq!(
+            check_facade_content("lib.rs", "struct Sneaky;\n"),
+            vec![SourceViolation {
+                path: "lib.rs".to_owned(),
+                line: 1,
+                marker: FACADE_NON_REEXPORT,
+            }]
         );
     }
 
@@ -527,6 +677,7 @@ pacta-executor = { path = "../pacta-executor" }
 [workspace]
 resolver = "2"
 members = [
+    "pacta",
     "pacta-conformance",
     "pacta-contract",
     "pacta-driver",
