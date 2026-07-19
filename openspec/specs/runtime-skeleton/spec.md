@@ -33,7 +33,9 @@ Pacta SHALL expose an executor abstraction using Pacta runtime vocabulary rather
 Pacta SHALL express the pact lifecycle as a sans-I/O kernel: a pure state machine
 that decides the next `Directive` from its state and absorbs `Notice` reports,
 performing no I/O and exposing no `async fn`. The kernel SHALL preserve the
-existing lifecycle decisions without adding orchestration behavior.
+existing lifecycle decisions without adding orchestration behavior, and SHALL
+fabricate no `Outcome` it was not given — it settles only outcomes execution
+actually produced.
 
 #### Scenario: Kernel performs no I/O
 - **WHEN** the kernel advances the lifecycle
@@ -47,9 +49,9 @@ existing lifecycle decisions without adding orchestration behavior.
 - **WHEN** a runtime feeds an execution outcome notice back to the kernel
 - **THEN** the kernel decides `Outcome::Fulfilled` as a fulfill settlement and `Outcome::Breached` as a breach settlement
 
-#### Scenario: Kernel treats executor infrastructure error as breach
+#### Scenario: Kernel leaves an executor infrastructure error unsettled
 - **WHEN** a runtime feeds an executor infrastructure error notice back to the kernel
-- **THEN** the kernel decides a breach settlement while the runtime surfaces the error to its caller
+- **THEN** the kernel settles nothing and reaches an unsettled terminal, fabricating no `Outcome`, so the claim is left held-but-unsettled to lapse and be reclaimed while the runtime surfaces the error to its caller
 
 #### Scenario: Kernel is idle when nothing is claimed
 - **WHEN** a runtime feeds an empty claim notice to the kernel
@@ -76,9 +78,9 @@ lifecycle outcomes itself.
 - **WHEN** the kernel issues a settle directive with `Outcome::Fulfilled` or `Outcome::Breached`
 - **THEN** the driver settles the claim with `Registry::fulfill` or `Registry::breach` respectively
 
-#### Scenario: Driver surfaces executor infrastructure error
+#### Scenario: Driver surfaces executor infrastructure error and settles nothing
 - **WHEN** the executor returns an executor error for an execute directive
-- **THEN** the kernel decides a breach settlement and the driver returns the executor error to the caller
+- **THEN** the driver settles nothing, returns the executor error to the caller, and leaves the claim unsettled so its lease lapses and the pact is reclaimed
 
 #### Scenario: Empty docket is idle
 - **WHEN** the registry returns no claim for a claim directive
