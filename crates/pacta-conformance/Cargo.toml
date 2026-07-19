@@ -1,0 +1,11 @@
+[package]
+name = "pacta-conformance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Backend-agnostic conformance suite for Pacta Registry implementations."
+publish = false
+
+[dependencies]
+pacta-contract.workspace = true
+uuid.workspace = true

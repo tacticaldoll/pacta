@@ -117,6 +117,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
+name = "pacta-conformance"
+version = "0.1.0"
+dependencies = [
+ "pacta-contract",
+ "uuid",
+]
+
+[[package]]
 name = "pacta-contract"
 version = "0.1.0"
 dependencies = [
@@ -145,6 +153,15 @@ name = "pacta-governance"
 version = "0.1.0"
 dependencies = [
  "tianheng",
+]
+
+[[package]]
+name = "pacta-memory"
+version = "0.1.0"
+dependencies = [
+ "pacta-conformance",
+ "pacta-contract",
+ "uuid",
 ]
 
 [[package]]
