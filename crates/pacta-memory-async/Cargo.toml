@@ -1,6 +1,7 @@
 [package]
 name = "pacta-memory-async"
-version.workspace = true
+# Own version line, tracking the async binding it references (see pacta-contract-async).
+version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -9,7 +10,8 @@ readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 description = "In-memory async Pacta Registry backend: the reference AsyncRegistry, composing over the shared lifecycle kernel."
-publish.workspace = true
+# Unpublished while the async surface evolves (see pacta-contract-async).
+publish = false
 
 [dependencies]
 pacta-contract.workspace = true
