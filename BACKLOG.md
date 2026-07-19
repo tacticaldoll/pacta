@@ -110,6 +110,13 @@ proposal.
   core). A sans-I/O-pure version of this collides with the synchronous `Executor`
   (which cannot yield to be heartbeated mid-execution), so it pulls at the sync/async
   seam. Recorded as a future fork; not decided here.
+- The kernel's public exposure. `pacta_contract::kernel` is a committed public API
+  only because `pacta-driver` consumes it across the crate boundary and Rust has no
+  cross-crate "friend" visibility — not because it was offered as a feature. It is
+  declared the advanced tier and its driving contract is manifested. Narrowing its
+  *exposure* as Pacta approaches 1.0 (e.g. feature-gating it, so a consumer who does
+  not build a custom runtime never sees it) is an option — narrowing exposure, NOT
+  deprecating the shipped, governed kernel. Not decided here.
 
 ## Explicitly Deferred
 
