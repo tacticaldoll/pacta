@@ -16,7 +16,6 @@ publish = false
 [dependencies]
 pacta-contract.workspace = true
 pacta-contract-async.workspace = true
-async-trait.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
