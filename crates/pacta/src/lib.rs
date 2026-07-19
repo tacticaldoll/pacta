@@ -5,10 +5,11 @@
 //!
 //! - the lifecycle contract — [`Pact`], [`Claim`], [`Retainer`], [`Timestamp`],
 //!   [`Outcome`], [`Settlement`], and the [`Registry`] trait;
-//! - the backend-author surface — the [`Transition`] port and the colorless
+//! - the backend-author surface — the [`Transition`] port, the colorless
 //!   [`lifecycle`] kernel ([`State`](lifecycle::State), the `on_X` transition
 //!   decisions, [`is_claimable`](lifecycle::is_claimable), and the lease arithmetic),
-//!   so a legal `Registry` is implementable from `pacta` alone;
+//!   and the [`Uuid`] identifier type the constructors require (to build a [`Pact`] and
+//!   mint a fresh [`Retainer`]), so a legal `Registry` is implementable from `pacta` alone;
 //! - execution composition — [`Executor`], [`Execution`], [`Middleware`], and the
 //!   composition mechanism [`Identity`], [`Stack`], and [`Composition`];
 //! - the runtime driver — [`Driver`], [`Step`], [`DriverError`].
@@ -79,12 +80,18 @@
 //! use pacta::lifecycle::{self, State};
 //! use pacta::{
 //!     Claim, Composition, Driver, Execution, Executor, Identity, Middleware, Outcome, Pact,
-//!     Registry, Retainer, Step, Timestamp, Transition,
+//!     Registry, Retainer, Step, Timestamp, Transition, Uuid,
 //! };
 //!
-//! // A legal single-pact `Registry`, implemented with only the facade surface: it stores real
-//! // lifecycle state and applies the transition within one atomic (`Mutex`) scope.
-//! struct Ledger { lease_millis: u64, record: Mutex<(Pact, State)> }
+//! // A complete legal single-pact `Registry`, implemented with only the facade surface: it stores
+//! // real lifecycle state, mints a *distinct* retainer per claim (so authority rotates on reclaim),
+//! // and applies the transition within one atomic (`Mutex`) scope.
+//! struct Ledger { lease_millis: u64, record: Mutex<(Pact, State, u128)> }
+//!
+//! fn new_ledger() -> Ledger {
+//!     let pact = Pact::new(Uuid::from_u128(1), "default".into(), "demo".into(), Vec::new());
+//!     Ledger { lease_millis: 30_000, record: Mutex::new((pact, State::Available, 0)) }
+//! }
 //!
 //! #[derive(Debug)]
 //! struct NotHeld;
@@ -103,7 +110,8 @@
 //!         if !dockets.contains(&record.0.docket.as_str()) || !lifecycle::is_claimable(&record.1, now) {
 //!             return Ok(None);
 //!         }
-//!         let retainer = Retainer::new(Default::default());
+//!         let retainer = Retainer::new(Uuid::from_u128(record.2)); // a fresh, distinct token per claim
+//!         record.2 += 1;
 //!         record.1 = lifecycle::on_claim(&retainer, now, self.lease_millis);
 //!         Ok(Some(Claim::new(record.0.clone(), retainer, lifecycle::lease_expiry(now, self.lease_millis))))
 //!     }
@@ -128,22 +136,26 @@
 //!     fn execute(&mut self, _e: Execution) -> Result<Outcome, Self::Error> { Ok(Outcome::Fulfilled) }
 //! }
 //!
-//! let pact = Pact::new(Default::default(), "default".into(), "demo".into(), Vec::new());
-//! let ledger = Ledger { lease_millis: 30_000, record: Mutex::new((pact, State::Available)) };
+//! // Compose and settle: claim → execute through a pass-through middleware → settle.
 //! let performer = Composition::new().then(Identity).wrap(Performer); // compose, then wrap
-//! let mut driver = Driver::new(ledger, performer, ["default".to_string()]);
-//!
-//! assert_eq!(driver.step().unwrap(), Step::Fulfilled); // claim → execute → settle
-//!
+//! let mut driver = Driver::new(new_ledger(), performer, ["default".to_string()]);
+//! assert_eq!(driver.step().unwrap(), Step::Fulfilled);
 //! // The transition was really applied and persisted: the settled pact is no longer claimable.
 //! assert!(driver.registry().claim(&["default"], Timestamp::from_millis(0)).unwrap().is_none());
+//!
+//! // A complete legal backend also rotates authority on reclaim: claim, let the lease lapse, then
+//! // reclaim at a later injected time — the new retainer differs, so the stale holder cannot settle.
+//! let ledger = new_ledger();
+//! let first = ledger.claim(&["default"], Timestamp::from_millis(0)).unwrap().unwrap();
+//! let second = ledger.claim(&["default"], Timestamp::from_millis(1_000_000)).unwrap().unwrap();
+//! assert_ne!(first.retainer.id(), second.retainer.id());
 //! ```
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 pub use pacta_contract::{
-    Claim, Outcome, Pact, Registry, Retainer, Settlement, Timestamp, Transition, lifecycle,
+    Claim, Outcome, Pact, Registry, Retainer, Settlement, Timestamp, Transition, Uuid, lifecycle,
 };
 pub use pacta_driver::{Driver, DriverError, Step};
 pub use pacta_executor::{Composition, Execution, Executor, Identity, Middleware, Stack};

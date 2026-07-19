@@ -8,12 +8,14 @@ types and `Registry`, the `Executor` / `Execution` / `Middleware` execution seam
 `Identity` / `Stack` / `Composition` composition mechanism, and the `Driver` runtime loop.
 This is the recommended crate to depend on.
 
-It also re-exports the **backend-author surface** — the `Transition` port and the colorless
+It also re-exports the **backend-author surface** — the `Transition` port, the colorless
 `lifecycle` module (`State`, the `on_X` transition decisions, `is_claimable`, and the lease
-arithmetic) — so a legal `Registry` backend is implementable from `pacta` alone: hold
-`lifecycle::State`, implement the native `claim` selection, a `lease_millis` accessor, and
-an atomic `apply` transition port, and inherit `heartbeat` / `fulfill` / `breach` / `release`
-as defaults. The crate-root doctest demonstrates exactly such a legal, stateful backend.
+arithmetic), and the `Uuid` identifier type the constructors require — so a legal `Registry`
+backend is implementable from `pacta` alone: hold `lifecycle::State`, implement the native `claim`
+selection (minting a fresh `Retainer` so authority rotates on reclaim), a `lease_millis` accessor,
+and an atomic `apply` transition port, and inherit `heartbeat` / `fulfill` / `breach` / `release`
+as defaults. The crate-root doctest demonstrates exactly such a legal, stateful backend — settling
+a pact and proving a reclaim rotates its retainer.
 
 Pacta ships the durable lifecycle from `Pact` onward — you bring your own runtime,
 your own registry backend, and your own executor. Durable backends live outside this
