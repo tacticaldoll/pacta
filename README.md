@@ -21,7 +21,8 @@ Pacta ships the lifecycle from `Pact` onward, not an ingress API.
 Pacta is a thin lifecycle foundation, not a complete durable runtime. It ships the durable
 lifecycle **contract** (`Registry`, over one `apply` transition port — sync, and behind the
 `async` feature an `AsyncRegistry`), a sans-I/O **kernel**, lease/lapse with injected time,
-deferred reclaim (`release`), execution **composition** (`Executor`/`Middleware`), a mechanical
+deferred reclaim (`release`), execution **composition** (`Executor`/`Middleware`, reified as
+`Identity`/`Stack`/`Composition`), a mechanical
 **driver**, in-memory **reference backends**, a backend-agnostic **conformance** suite, and
 executable **governance**.
 
