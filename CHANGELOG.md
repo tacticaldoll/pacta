@@ -4,6 +4,31 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-07-13
+
+A kernel behavior correction plus documentation and packaging polish. No breaking
+API change — the one added enum variant is `#[non_exhaustive]`-safe.
+
+### Changed
+
+- **An infrastructure failure now lapses instead of terminally breaching.** The
+  sans-I/O kernel no longer fabricates `Outcome::Breached` from an execution failure:
+  an executor error leaves the claim unsettled, so its lease lapses and the pact is
+  reclaimed (at-least-once), rather than being terminally breached. The driver settles
+  nothing on an executor error and still surfaces it to the caller. Failure
+  disposition (retry, fail-fast) composes at the `Middleware` seam; an executor that
+  returns `Ok(Outcome::Breached)` still settles a breach.
+- Each publishable crate now ships its own README, so its crates.io page documents
+  that crate rather than rendering the shared workspace README.
+- `pacta-contract`'s crate description no longer labels Pacta a "task runtime".
+
+### Added
+
+- `StepResult::Unsettled` — the kernel's terminal for a step whose execution produced
+  no outcome. It is `#[non_exhaustive]`, so downstream matches are unaffected.
+- Root README: a "what Pacta owns vs what you compose" composition-pattern section
+  and a License section.
+
 ## [0.1.0] - 2026-07-12
 
 First public release: the thin lifecycle foundation, not a complete durable runtime.
@@ -53,4 +78,5 @@ First public release: the thin lifecycle foundation, not a complete durable runt
 - No ingress API (`Signal -> Pact` is user-provided, not a shipped surface).
 - No framework adapters (Tower, HTTP) and no retry/backoff/timeout orchestration.
 
+[0.1.1]: https://github.com/tacticaldoll/pacta/releases/tag/v0.1.1
 [0.1.0]: https://github.com/tacticaldoll/pacta/releases/tag/v0.1.0
