@@ -3,7 +3,7 @@ name = "pacta-contract"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The zero-dependency core contract for the Pacta task runtime."
+description = "The isolated core contract for the Pacta task runtime."
 publish = false
 
 [dependencies]

@@ -19,9 +19,11 @@ pub enum Step {
 
 /// Error returned by a driver step.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DriverError<RegistryError> {
+pub enum DriverError<RegistryError, ExecutorError> {
     /// Registry operation failed.
     Registry(RegistryError),
+    /// Executor infrastructure failed after the claim was breached.
+    Executor(ExecutorError),
 }
 
 /// Mechanical loop that claims pacts, executes them, and settles claims.
@@ -60,7 +62,7 @@ where
     E: Executor,
 {
     /// Perform one claim, execute, and settle step.
-    pub fn step(&mut self) -> Result<Step, DriverError<R::Error>> {
+    pub fn step(&mut self) -> Result<Step, DriverError<R::Error, E::Error>> {
         let dockets: Vec<&str> = self.dockets.iter().map(String::as_str).collect();
         let Some(claim) = self
             .registry
@@ -71,11 +73,17 @@ where
         };
 
         let retainer = claim.retainer;
-        let outcome = self.executor.execute(Execution::new(claim.pact));
+        let outcome = match self.executor.execute(Execution::new(claim.pact)) {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                self.breach(&retainer)?;
+                return Err(DriverError::Executor(error));
+            }
+        };
 
         let step = match outcome {
-            Ok(Outcome::Fulfilled) => Step::Fulfilled,
-            Ok(Outcome::Breached) | Err(_) => Step::Breached,
+            Outcome::Fulfilled => Step::Fulfilled,
+            Outcome::Breached => Step::Breached,
         };
 
         match step {
@@ -87,13 +95,13 @@ where
         Ok(step)
     }
 
-    fn fulfill(&self, retainer: &Retainer) -> Result<(), DriverError<R::Error>> {
+    fn fulfill(&self, retainer: &Retainer) -> Result<(), DriverError<R::Error, E::Error>> {
         self.registry
             .fulfill(retainer)
             .map_err(DriverError::Registry)
     }
 
-    fn breach(&self, retainer: &Retainer) -> Result<(), DriverError<R::Error>> {
+    fn breach(&self, retainer: &Retainer) -> Result<(), DriverError<R::Error, E::Error>> {
         self.registry
             .breach(retainer)
             .map_err(DriverError::Registry)
@@ -248,7 +256,7 @@ mod tests {
         };
         let mut driver = Driver::new(registry, executor, ["default".to_string()]);
 
-        assert_eq!(driver.step(), Ok(Step::Breached));
+        assert_eq!(driver.step(), Err(DriverError::Executor(())));
         let state = driver
             .registry()
             .state

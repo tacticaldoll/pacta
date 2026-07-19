@@ -8,17 +8,18 @@ The overarching journey of Pacta is defined by these phases.
 
 ### Phase 1: Foundation (✓ Shipped)
 - Core architectural axioms defined (`AGENTS.md`).
-- Pure, zero-dependency `Pact` and `Registry` trait defined (`pacta-contract`).
+- Isolated `Pact` and `Registry` trait defined (`pacta-contract`) with no
+  dependency on other workspace crates.
 - Executable governance via `tianheng` (`pacta-governance`).
 - CI, cargo-deny, rustdoc, clippy, fmt, and governance gates established.
 
 ### Phase 2: Execution Engine
 - Implement `pacta-driver`: The runtime loop that claims Pacts from a `Registry`
   by `Docket` and passes them to an `Executor`.
-- Define standard `Middleware` and `Policy` layers for orchestration (Retries,
-  Timeouts, Rate Limiting).
-- Wire up optional `Tower` adapter compatibility after the Pacta-native runtime
-  skeleton is stable.
+- Define Pacta-native `Middleware` and `Policy` layers for orchestration
+  (Retries, Timeouts, Rate Limiting).
+- Wire up optional `Tower` compatibility in an adapter-owned crate after the
+  Pacta-native runtime skeleton is stable.
 
 ### Phase 3: Conformance Suite
 - Build `pacta-conformance`: A test suite to validate `Registry` behavior across different backends.

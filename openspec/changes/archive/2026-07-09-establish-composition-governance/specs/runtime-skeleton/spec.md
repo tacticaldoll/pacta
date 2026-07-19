@@ -1,12 +1,4 @@
-# Runtime Skeleton Specification
-
-## Purpose
-
-Define Pacta's first runtime skeleton: a Pacta-native executor abstraction, a
-mechanical driver loop, and the runtime behaviors deliberately deferred from the
-initial skeleton.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Pacta-Native Executor
 Pacta SHALL expose an executor abstraction using Pacta runtime vocabulary rather than Tower as the core public API.
@@ -49,18 +41,3 @@ Pacta SHALL provide a driver skeleton that mechanically composes a `Registry` wi
 #### Scenario: Empty docket is idle
 - **WHEN** the registry returns no claim
 - **THEN** the driver reports an idle step without calling the executor
-
-### Requirement: Deferred Runtime Behavior
-Pacta SHALL keep orchestration policies out of the first runtime skeleton.
-
-#### Scenario: Retry is not in the skeleton
-- **WHEN** the runtime skeleton is implemented
-- **THEN** it does not compute retry attempts or backoff
-
-#### Scenario: Tribunal is not in the skeleton
-- **WHEN** the runtime skeleton is implemented
-- **THEN** it does not move exhausted pacts to Tribunal
-
-#### Scenario: Backends are not in the skeleton
-- **WHEN** the runtime skeleton is implemented
-- **THEN** it does not add memory, SQLite, Postgres, Redis, or other registry backends

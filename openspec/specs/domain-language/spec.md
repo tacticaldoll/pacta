@@ -49,11 +49,11 @@ Pacta SHALL preserve the foundation axioms while changing public names.
 
 #### Scenario: Execution remains middleware-oriented
 - **WHEN** public documentation introduces `Executor` terminology
-- **THEN** execution orchestration remains delegated to the middleware ecosystem
+- **THEN** execution orchestration remains delegated to Pacta-native middleware and policy composition
 
 #### Scenario: Tower remains adapter terminology
 - **WHEN** Tower integration is introduced
-- **THEN** Tower terms remain in adapter crates or features rather than defining core runtime APIs
+- **THEN** Tower terms remain in adapter-owned crates rather than defining core runtime APIs
 
 #### Scenario: Runtime loop remains mechanical
 - **WHEN** private implementation refers to the loop that polls a registry and drives execution
@@ -61,7 +61,7 @@ Pacta SHALL preserve the foundation axioms while changing public names.
 
 #### Scenario: Contract remains isolated
 - **WHEN** public names change in `pacta-contract`
-- **THEN** the crate remains governed as the isolated zero-dependency contract crate
+- **THEN** the crate remains governed as the isolated contract crate with no dependency on other workspace crates
 
 ### Requirement: Runtime Universe Vocabulary
 Pacta SHALL define canonical public terms for its runtime skeleton before exposing runtime APIs.
@@ -84,7 +84,7 @@ Pacta SHALL define canonical public terms for its runtime skeleton before exposi
 
 #### Scenario: Naming middleware policies
 - **WHEN** public APIs, specs, or user-facing documentation refer to retry, timeout, rate limit, or similar execution orchestration
-- **THEN** they use clear engineering terms such as `Middleware` and `Policy`
+- **THEN** they use clear Pacta-native engineering terms such as `Middleware` and `Policy`
 
 ### Requirement: Roadmap Uses Pacta Terms
 Pacta SHALL use canonical domain terms in planning and roadmap documents.
