@@ -31,9 +31,8 @@ the concept is part of Pacta's public model.
 - `Outcome` - the executor's result for an execution.
 - `Settlement` - the lifecycle conclusion applied to a claim, currently fulfill
   or breach.
-- `Middleware` - Pacta-native execution composition around an executor.
-- `Policy` - Pacta-native orchestration rule such as retry, timeout, or rate
-  limiting.
+- `Middleware` - Pacta-native execution composition around an executor. It acts as a decorator without framework concepts like readiness or generic requests.
+- `Policy` - A minimal value naming an orchestration intent (like retry or timeout) that is evaluated by middleware, separated from the actual orchestration behavior.
 - `Driver` - a mechanical runtime-loop term for polling a registry and driving
   execution. Use it when discussing implementation mechanics, not as the main
   public role.
