@@ -25,7 +25,7 @@ impl Execution {
 /// Public role responsible for executing claimed pacts through middleware.
 pub trait Executor {
     /// Error returned when the execution infrastructure fails.
-    type Error;
+    type Error: std::error::Error;
 
     /// Execute a claimed pact.
     fn execute(&mut self, execution: Execution) -> Result<Outcome, Self::Error>;
@@ -66,6 +66,14 @@ mod tests {
 
     #[derive(Debug)]
     struct DummyError;
+
+    impl std::fmt::Display for DummyError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "dummy error")
+        }
+    }
+
+    impl std::error::Error for DummyError {}
 
     struct DummyExecutor;
     impl Executor for DummyExecutor {
