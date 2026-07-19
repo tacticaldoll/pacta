@@ -8,16 +8,17 @@ The overarching journey of Pacta is defined by these phases.
 
 ### Phase 1: Foundation (✓ Shipped)
 - Core architectural axioms defined (`AGENTS.md`).
-- Pure, zero-dependency `Pact` and `Store` trait defined (`pacta-contract`).
+- Pure, zero-dependency `Pact` and `Registry` trait defined (`pacta-contract`).
 - Executable governance via `tianheng` (`pacta-governance`).
 
 ### Phase 2: Execution Engine
-- Implement `pacta-driver`: The runtime loop that consumes the `Store`.
+- Implement `pacta-driver`: The runtime loop that claims Pacts from a `Registry`
+  by `Docket` and passes them to an `Executor`.
 - Define standard `Middleware` layers for orchestration (Retries, Timeouts, Rate Limiting).
 - Wire up `Tower` compatibility.
 
 ### Phase 3: Conformance Suite
-- Build `pacta-conformance`: A test suite to validate `Store` behavior across different backends.
+- Build `pacta-conformance`: A test suite to validate `Registry` behavior across different backends.
 - Establish the baseline tests that all backends (in-memory, SQLite, Postgres, Redis) must pass.
 
 ### Phase 4: Durable Backends
@@ -29,6 +30,6 @@ The overarching journey of Pacta is defined by these phases.
 
 Features or concepts that are explicitly postponed until the core contract is robust:
 
-- **Dashboard / UI**: Operator visibility into the lifecycle is important, but comes after the core engine is proven.
+- **Dashboard / UI**: Operator visibility into the lifecycle and Tribunal is important, but comes after the core engine is proven.
 - **Complex Topologies**: Directed Acyclic Graphs (DAGs) and inter-job dependencies.
 - **Strict Exactly-Once Delivery**: Pacta guarantees at-least-once. Exactly-once is an application-level concern.
