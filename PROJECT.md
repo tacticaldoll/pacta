@@ -2,10 +2,13 @@
 
 ## Purpose
 
-Pacta is a Tower-native, middleware-driven contract runtime for Rust. It is
+Pacta is a Pacta-native, middleware-oriented contract runtime for Rust. It is
 designed to act as an ultra-minimalist durable pact system that delegates all
 execution orchestration (retries, timeouts, rate limiting, routing) to the
 middleware ecosystem.
+
+Tower may be supported through adapters, but Tower vocabulary must not define
+Pacta's core public API.
 
 By stripping business logic from the registry layer, Pacta enables backend
 substitutability, massive concurrency through executor implementations, and
@@ -39,6 +42,6 @@ See `docs/domain-language.md` for the canonical glossary and legacy mapping.
 When comparing possible changes, prefer the one that protects the core contract earliest. Future phases are defined in `BACKLOG.md`, but the prioritization rule is always:
 
 1. Correctness, data integrity, and strict adherence to the Three Axioms.
-2. Specified feature completeness for the Middleware ecosystem.
+2. Specified feature completeness for the middleware ecosystem.
 3. Operator observability (tracing, tribunal review).
 4. Scale-out and new `Registry` backend integrations.

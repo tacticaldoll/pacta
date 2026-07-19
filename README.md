@@ -1,6 +1,6 @@
 # Pacta
 
-A Tower-native, middleware-driven contract runtime for Rust.
+A Pacta-native, middleware-oriented contract runtime for Rust.
 
 Pacta was born from a fundamental critique of traditional, broker-centric job queues. Traditional queues suffer from "Semantic Bloat" — they pull execution policies (retries, backoff, routing, dead-letter storage, priority) into the storage layer and the core job envelope. This forces every storage backend (Postgres, Redis, etc.) to implement complex business logic, making the system heavy, hard to extend, and prone to breaking.
 
@@ -16,8 +16,7 @@ transitions: `claim`, `heartbeat`, `fulfill`, and `breach`.
 
 - **Registry**: Pure state machine. Never computes backoff, never manages delays,
   and never inspects clauses.
-- **Executor**: Public role for executing claimed pacts through standard `Tower`
-  middleware.
+- **Executor**: Public role for executing claimed pacts through middleware.
 - **Contract**: Zero-dependency `pacta-contract` enforced by `tianheng`.
 
 ## Domain Language

@@ -1,0 +1,10 @@
+[package]
+name = "pacta-executor"
+description = "Pacta-native execution abstractions."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pacta-contract.workspace = true

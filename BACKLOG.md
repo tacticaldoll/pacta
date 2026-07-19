@@ -15,8 +15,10 @@ The overarching journey of Pacta is defined by these phases.
 ### Phase 2: Execution Engine
 - Implement `pacta-driver`: The runtime loop that claims Pacts from a `Registry`
   by `Docket` and passes them to an `Executor`.
-- Define standard `Middleware` layers for orchestration (Retries, Timeouts, Rate Limiting).
-- Wire up `Tower` compatibility.
+- Define standard `Middleware` and `Policy` layers for orchestration (Retries,
+  Timeouts, Rate Limiting).
+- Wire up optional `Tower` adapter compatibility after the Pacta-native runtime
+  skeleton is stable.
 
 ### Phase 3: Conformance Suite
 - Build `pacta-conformance`: A test suite to validate `Registry` behavior across different backends.
