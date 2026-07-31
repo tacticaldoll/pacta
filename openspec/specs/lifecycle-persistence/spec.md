@@ -210,9 +210,32 @@ single-sourced across backends and across a future async binding, so they cannot
 other lifecycle requirements in this spec are unchanged and are now realized by this shared
 kernel.
 
+A transition operation and the claim selection compose over the kernel differently, and the
+distinction SHALL be stated so a durable backend is not misled. A **transition** (`apply`) SHALL
+execute the shared `lifecycle::on_X` decision directly on the single held state it loaded — the
+kernel decides the next state and the backend persists it. **Claim selection** SHALL re-express
+the `lifecycle::is_claimable` eligibility invariant as a **native, atomic, full-scan-free** query
+against the backend's own store (for example a SQL predicate over indexed columns with
+`SKIP LOCKED`); a durable backend SHALL NOT be required to load an entire docket into memory and
+call the Rust predicate per row. Because eligibility is re-expressed natively rather than by
+calling the same function, `pacta-conformance` is the executable proof that the native selection
+and the shared predicate agree.
+
 #### Scenario: A backend composes over the shared kernel
 - **WHEN** a `Registry` backend decides claim-eligibility or applies a lifecycle transition
-- **THEN** it calls the shared `lifecycle` module rather than computing eligibility or the transition itself
+- **THEN** it derives the outcome from the shared `lifecycle` module's semantics rather than computing eligibility or the transition itself
+
+#### Scenario: A transition executes the shared decision directly
+- **WHEN** a backend applies a lifecycle transition through `apply`
+- **THEN** it runs the shared `lifecycle::on_X` decision on the state it loaded for the holding retainer and persists the returned next state, deciding no transition of its own
+
+#### Scenario: Durable claim re-expresses the predicate natively without a full scan
+- **WHEN** a durable backend selects a claimable pact
+- **THEN** it re-expresses the `lifecycle::is_claimable` invariant as a native, atomic, full-scan-free query over its own store, rather than loading the whole docket to call the Rust predicate per row
+
+#### Scenario: Conformance proves the native predicate matches the canonical one
+- **WHEN** a backend's native claim selection is subjected to `pacta-conformance`
+- **THEN** the suite is the executable proof that the native selection admits exactly the pacts the shared `lifecycle::is_claimable` predicate admits, since the native query cannot be checked to *be* the shared function
 
 #### Scenario: The kernel is pure
 - **WHEN** the `lifecycle` module computes an eligibility verdict or a transition
@@ -221,6 +244,41 @@ kernel.
 #### Scenario: Extraction preserves behavior
 - **WHEN** the reference backend is refactored to compose over the shared kernel
 - **THEN** it passes the identical `pacta-conformance` suite with no change to its observable behavior
+
+### Requirement: Settled State Is A Model Representation, Not A Storage Obligation
+`lifecycle::State::Settled` SHALL be the lifecycle transition model's — and the reference backend's
+— representation of a concluded obligation, and SHALL NOT be a required storage obligation on a
+durable backend. A durable backend MAY represent a settled pact by removing its row (or otherwise
+discarding its state), provided the only guarantee settlement owes still holds: after settlement
+the pact is not claimable again and the prior holder's retainer can no longer apply a transition to
+it. The specs and backend-author documentation SHALL NOT assume a settled pact persists.
+
+#### Scenario: A durable backend may drop a settled pact's row
+- **WHEN** a durable backend concludes a pact by fulfill or breach
+- **THEN** it may delete the pact's row rather than store a settled marker, because a load of the absent row returns no state and the pact is thereby not claimable and not transition-able by the prior retainer
+
+#### Scenario: Settlement's only guarantee is preserved without persistence
+- **WHEN** a settled pact is represented by an absent row
+- **THEN** a later claim does not return it and a prior-retainer transition against it resolves to not-current-holder, which is the whole of what settlement guarantees
+
+#### Scenario: Docs do not assume settled persistence
+- **WHEN** the lifecycle-persistence spec, `State` rustdoc, or backend-author documentation describe a settled pact
+- **THEN** they state that persisting the settled state is the reference representation, not a required storage obligation, so a backend author is not misled into persisting a state it would rather drop
+
+### Requirement: Lifecycle State Is A Closed Four-Variant Model For The 0.2 Series
+`lifecycle::State` SHALL be, for the 0.2 series, a closed enumeration of exactly four variants —
+`Available`, `Held`, `Deferred`, and `Settled` — so a backend author knows the complete set of
+states it must represent and is not left to guess whether the surface can grow underneath it within
+the patch line. This is a stability statement about the model a backend maps to its own storage, not
+a promise never to evolve the model in a future minor series.
+
+#### Scenario: A backend author sees the complete state set
+- **WHEN** a backend author maps `lifecycle::State` to its own storage
+- **THEN** the documentation states the four variants are the complete set for the 0.2 series, so the backend can represent each one without guessing at a hidden or future variant
+
+#### Scenario: The closed set is stated where a backend author reads it
+- **WHEN** the backend-author documentation describes the states a backend must handle
+- **THEN** it names `Available`, `Held`, `Deferred`, and `Settled` as the closed 0.2-series set, distinct from the growing `#[non_exhaustive]` protocol enums elsewhere in the contract
 
 ### Requirement: Backends Apply Transitions Through A Uniform Port
 Pacta SHALL express every lifecycle transition, in both the sync and async bindings, through one

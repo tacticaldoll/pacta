@@ -77,3 +77,21 @@ documented convention.
 - **THEN** a test drives a composition of two pass-through middleware assembled through
   `Identity`, `Stack`, and the assembler to a settlement, so the reified mechanism is proven to
   compose and fails if that property regresses
+
+### Requirement: Composition Order Is Proven By A Full Enter/Exit Trace
+Pacta SHALL prove the documented composition order with an observable enter/exit trace, not only by
+comparing the final `Outcome`. A trace-recording middleware SHALL record when each layer is entered
+and exited around the inner execution, and a test SHALL assert the complete ordering for a
+composition of two such middleware over an executor: the **first** middleware added with `then` is
+outermost — it is entered first and exited last; the **second** is nested within it — entered
+second and exited second-to-last; and the executor is innermost. Asserting the full trace, rather
+than the settled `Outcome` alone, proves the nesting direction and not merely that composition
+produces some working executor.
+
+#### Scenario: The full enter/exit trace matches the documented nesting
+- **WHEN** a composition of two trace-recording middleware over an executor executes a pact
+- **THEN** the recorded trace is: first-enter, second-enter, executor, second-exit, first-exit — so the first-added middleware is outermost (entered first, exited last), the second is nested within it, and the executor is innermost
+
+#### Scenario: The proof compares the trace, not only the outcome
+- **WHEN** the composition-order proof runs
+- **THEN** it asserts the full ordered enter/exit trace rather than only the final `Outcome`, so a regression that inverted the nesting while preserving the outcome would still fail

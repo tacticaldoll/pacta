@@ -158,8 +158,14 @@ pub type Settlement = Outcome;
 pub mod lifecycle {
     use crate::{Retainer, Timestamp};
 
-    /// A pact's position in its claim lifecycle: the pure state a backend stores per
-    /// pact. The backend owns where it lives; this owns what it means.
+    /// A pact's position in its claim lifecycle: the pure state a backend maps to its own storage.
+    /// The backend owns where it lives; this owns what it means.
+    ///
+    /// For the 0.2 series this is a **closed** enumeration of exactly these four variants — it is
+    /// deliberately not `#[non_exhaustive]` — so a backend author knows the complete set of states to
+    /// represent and can match it exhaustively, distinct from the growing `#[non_exhaustive]`
+    /// protocol enums (`Directive`/`Notice`/`StepResult`) elsewhere in this crate. (This is a
+    /// stability statement for 0.2.x, not a promise never to evolve the model in a later minor.)
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub enum State {
         /// Never claimed, or freshly seeded: immediately claimable.
@@ -178,6 +184,12 @@ pub mod lifecycle {
             reclaimable_at: Timestamp,
         },
         /// Concluded (fulfilled or breached): never claimable again.
+        ///
+        /// This is the *model* (and reference-backend) representation of a concluded obligation, not
+        /// a required storage obligation. A durable backend MAY represent settled by **removing the
+        /// row** — a load of the absent row returns no state, so the pact is trivially not claimable
+        /// and the prior retainer can no longer transition it, which is the whole of what settlement
+        /// guarantees. Do not assume a settled pact persists.
         Settled,
     }
 
@@ -368,9 +380,14 @@ pub mod lifecycle {
 }
 
 /// A pure kernel transition decision — a [`lifecycle`] `on_X` — passed to the transition port
-/// [`Registry::apply`] (and its async twin). It is `Send + Sync` so the async binding's `apply`
-/// future stays `Send` across `.await`; the same type is used by both bindings, so the port is
+/// [`Registry::apply`] (and its async twin). The same type is used by both bindings, so the port is
 /// literally one shape.
+///
+/// The `Send + Sync` bound is on the transition **closure**: it lets a backend hold the decision
+/// across its own atomic scope or hand it to a worker thread. It does **not** make the async
+/// binding's `apply` *future* `Send` — future coloring stays the consumer's (the async binding is
+/// deliberately `Send`-agnostic at its futures). A backend that needs a `Send` `apply` future
+/// satisfies that at its own concrete call site, not from this bound.
 pub type Transition<'a> = dyn Fn(&lifecycle::State) -> Result<lifecycle::State, lifecycle::NotCurrentHolder>
     + Send
     + Sync
@@ -385,12 +402,37 @@ mod async_registry;
 #[cfg(feature = "async")]
 pub use async_registry::{AsyncRegistry, apply_via_cas};
 
-/// The Registry manages the lifecycle of Pacts. It is a pure state machine.
+/// The Registry is the durable lifecycle-authority **port**: it preserves pacts and decides claim,
+/// lease, and settlement authority over them. It is *not itself* the pure state machine — the pure,
+/// colorless machine is [`lifecycle`], which every backend composes over; a `Registry`
+/// implementation is the I/O-owning port that persists that machine's states and enforces its
+/// authority (the async twin is [`AsyncRegistry`]).
 ///
-/// Time is injected: [`claim`](Registry::claim) and
-/// [`heartbeat`](Registry::heartbeat) take the current time as a parameter, and the
-/// registry reads no ambient clock. Settlement takes no time because a rotated
-/// retainer already tells a stale holder apart from the current one.
+/// A backend implements three primitives — a native [`claim`](Registry::claim) selection, a
+/// [`lease_millis`](Registry::lease_millis) accessor, and an atomic [`apply`](Registry::apply)
+/// transition port — and inherits heartbeat, fulfill, breach, and release as defaults over `apply`.
+/// The obligations mirror the async binding exactly:
+///
+/// - **`claim` selects atomically, admits only an eligible pact, and rotates the retainer.** It
+///   returns only a pact [`lifecycle::is_claimable`] would admit and mints a fresh retainer, all in
+///   one atomic step. A durable backend expresses this as a native, full-scan-free selection.
+/// - **`apply` is `load → decide → store` in one atomic scope.** It loads the state held by the
+///   retainer, computes the next state through the passed [`lifecycle`] decision, and stores it
+///   atomically; a non-atomic load-to-store window lets two workers both write and breaks
+///   exactly-once and retainer fencing.
+/// - **Reclaim — not mere expiry — rotates settlement authority.** A holder whose lease lapsed but
+///   whose pact no one reclaimed is still the current holder and can still settle; authority rotates
+///   only when the pact is actually reclaimed (or released). A transition against a pact the retainer
+///   no longer holds surfaces as a not-current-holder error through the backend's `Error`.
+///
+/// `pacta-conformance` proves the *behavioral* half of this (eligibility, transitions, lapse/reclaim
+/// rotation, and — via its contention checks — at-most-once claim and settlement). It does **not**
+/// prove the *query-shape* obligation that `claim` is full-scan-free; a sequential functional suite
+/// cannot observe query cost, so that stays a backend obligation established by review.
+///
+/// Time is injected: [`claim`](Registry::claim) and [`heartbeat`](Registry::heartbeat) take the
+/// current time as a parameter, and the registry reads no ambient clock. Settlement takes no time
+/// because a rotated retainer already tells a stale holder apart from the current one.
 pub trait Registry: Send + Sync {
     /// Error returned by the registry implementation.
     type Error: std::error::Error;
@@ -398,7 +440,12 @@ pub trait Registry: Send + Sync {
     /// Claim a pact for execution from one of the requested dockets, using `now`
     /// to set the new lease and to reclaim any pact whose lease already expired
     /// without settlement — a lapse, realized through this normal claim path.
-    /// Reclaiming rotates the retainer, so the prior holder can no longer settle.
+    ///
+    /// **Obligation:** select — atomically — only a pact [`lifecycle::is_claimable`] would admit
+    /// (available, a lapsed hold, or a deferred pact past its instant; never a settled one) and mint
+    /// a fresh retainer, so reclaiming rotates authority and the prior holder can no longer settle. A
+    /// durable backend expresses this as a native, full-scan-free selection (for example SQL
+    /// `SKIP LOCKED`), not by loading the whole docket to filter in memory.
     fn claim(&self, dockets: &[&str], now: Timestamp) -> Result<Option<Claim>, Self::Error>;
 
     /// The backend's lease duration in milliseconds, used by [`heartbeat`](Registry::heartbeat)

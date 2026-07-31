@@ -90,23 +90,26 @@ impl Store {
         Some(Claim::new(records[index].pact.clone(), retainer, expiry))
     }
 
-    /// Apply a lifecycle transition within one `Mutex` scope (load, decide, and store without
-    /// releasing the lock, so there is no load-then-store race). The `transition` carries the
-    /// authority check — it fails on any state the retainer does not hold — so scanning for the
-    /// first record it accepts locates the held pact; a durable backend would instead load by
-    /// `retainer`, and this in-memory scan is equivalent.
-    fn apply(&self, transition: &Transition<'_>) -> Result<(), NotHeld> {
+    /// Apply a lifecycle transition to the pact held by `retainer`, within one `Mutex` scope
+    /// (load, decide, and store without releasing the lock, so there is no load-then-store race).
+    /// This locates the record the retainer holds — the one whose state is `Held { retainer, .. }` —
+    /// exactly as a durable backend loads its row by the holder key, then runs the transition on
+    /// that record and persists the result. The transition's own `Result` is propagated, so a
+    /// transition that rejects the located state (a heartbeat on a lapsed-but-unreclaimed lease)
+    /// still fails. A retainer that holds no record resolves to `NotHeld` without mutating anything —
+    /// so an authority the caller does not hold cannot drive a transition, even one that would
+    /// accept any state.
+    fn apply(&self, retainer: &Retainer, transition: &Transition<'_>) -> Result<(), NotHeld> {
         let mut records = self
             .records
             .lock()
             .expect("registry mutex should not be poisoned");
-        for record in records.iter_mut() {
-            if let Ok(next) = transition(&record.state) {
-                record.state = next;
-                return Ok(());
-            }
-        }
-        Err(NotHeld)
+        let record = records
+            .iter_mut()
+            .find(|record| matches!(&record.state, State::Held { retainer: held, .. } if held == retainer))
+            .ok_or(NotHeld)?;
+        record.state = transition(&record.state)?;
+        Ok(())
     }
 }
 
@@ -143,8 +146,8 @@ impl Registry for MemoryRegistry {
         self.store.lease_millis()
     }
 
-    fn apply(&self, _retainer: &Retainer, transition: &Transition<'_>) -> Result<(), Self::Error> {
-        self.store.apply(transition)
+    fn apply(&self, retainer: &Retainer, transition: &Transition<'_>) -> Result<(), Self::Error> {
+        self.store.apply(retainer, transition)
     }
 }
 
@@ -186,14 +189,11 @@ impl pacta_contract::AsyncRegistry for MemoryRegistryAsync {
         self.store.lease_millis()
     }
 
-    async fn apply(
-        &self,
-        _retainer: &Retainer,
-        transition: &Transition<'_>,
-    ) -> Result<(), NotHeld> {
+    async fn apply(&self, retainer: &Retainer, transition: &Transition<'_>) -> Result<(), NotHeld> {
         // The store's `apply` is one atomic `Mutex` scope; awaiting nothing, this backend's futures
-        // are ready, but it exercises the same async surface a durable backend implements.
-        self.store.apply(transition)
+        // are ready, but it exercises the same async surface a durable backend implements. It
+        // locates the record held by `retainer`, as a durable backend loads its row by holder.
+        self.store.apply(retainer, transition)
     }
 }
 
@@ -204,6 +204,13 @@ mod tests {
     #[test]
     fn passes_registry_conformance() {
         pacta_conformance::run(MemoryRegistry::seeded);
+    }
+
+    /// The sync reference backend upholds at-most-once authority under real concurrent claim and
+    /// settlement contention, through the shared portable check.
+    #[test]
+    fn passes_sync_contention() {
+        pacta_conformance::run_contention(MemoryRegistry::seeded);
     }
 
     fn a_pact() -> Pact {
@@ -242,12 +249,86 @@ mod tests {
         );
     }
 
+    /// Adversarial authority: a stranger retainer paired with a transition that would accept *any*
+    /// state must not drive a transition, because `apply` locates the record the retainer holds and
+    /// the stranger holds none. The held pact is left untouched — the true holder still settles it —
+    /// so authority is enforced by the located record, not merely by the transition closure.
+    #[test]
+    fn apply_rejects_a_stranger_even_with_an_any_state_transition() {
+        let registry = MemoryRegistry::seeded(vec![a_pact()], 1000);
+        let claim = registry
+            .claim(&["d"], Timestamp::from_millis(0))
+            .expect("claim should not error")
+            .expect("a pact should be claimable");
+        let stranger = Retainer::new(Uuid::new_v4());
+        // This transition would accept any state — the safety must come from apply locating the
+        // stranger's (nonexistent) held record, not from the transition policing the holder.
+        let accept_any = |_state: &State| Ok::<State, lifecycle::NotCurrentHolder>(State::Settled);
+        assert_eq!(
+            registry.apply(&stranger, &accept_any),
+            Err(NotHeld),
+            "a retainer that holds no record cannot apply, even an any-state transition"
+        );
+        // The held pact was not mutated: the true holder still settles it.
+        registry
+            .fulfill(&claim.retainer)
+            .expect("the held state was untouched, so the holder still settles");
+    }
+
+    /// The correct holder's lifecycle transitions still succeed after locating by retainer:
+    /// heartbeat extends, and release then rotates authority away.
+    #[test]
+    fn apply_admits_the_true_holder() {
+        let registry = MemoryRegistry::seeded(vec![a_pact()], 1000);
+        let claim = registry
+            .claim(&["d"], Timestamp::from_millis(0))
+            .expect("claim should not error")
+            .expect("a pact should be claimable");
+        registry
+            .heartbeat(&claim.retainer, Timestamp::from_millis(500))
+            .expect("the holder's heartbeat extends the lease");
+        registry
+            .release(&claim.retainer, Timestamp::from_millis(0))
+            .expect("the holder releases");
+        assert_eq!(
+            registry.fulfill(&claim.retainer),
+            Err(NotHeld),
+            "release rotated authority, so the prior retainer no longer holds a record"
+        );
+    }
+
     /// The reference async backend is held to the same scenarios as every sync backend, through the
     /// shared conformance suite — the async binding proving itself, over the same `Store`.
     #[cfg(feature = "async")]
     #[test]
     fn passes_async_conformance() {
         pacta_conformance::run_async(MemoryRegistryAsync::seeded);
+    }
+
+    /// The async binding enforces authority the same way: a stranger retainer with an any-state
+    /// transition is rejected, over the same shared `Store::apply`.
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn async_apply_rejects_a_stranger_even_with_an_any_state_transition() {
+        use pacta_contract::AsyncRegistry;
+
+        let registry = MemoryRegistryAsync::seeded(vec![a_pact()], 1000);
+        let claim = registry
+            .claim(&["d"], Timestamp::from_millis(0))
+            .await
+            .expect("claim should not error")
+            .expect("a pact should be claimable");
+        let stranger = Retainer::new(Uuid::new_v4());
+        let accept_any = |_state: &State| Ok::<State, lifecycle::NotCurrentHolder>(State::Settled);
+        assert_eq!(
+            registry.apply(&stranger, &accept_any).await,
+            Err(NotHeld),
+            "the async binding also locates by retainer"
+        );
+        registry
+            .fulfill(&claim.retainer)
+            .await
+            .expect("the held state was untouched, so the holder still settles");
     }
 
     /// The at-most-once invariant under concurrent contention, through the shared *portable* runner

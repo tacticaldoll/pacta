@@ -176,6 +176,17 @@ pub trait AsyncRegistry: Send + Sync {
 ///
 /// A lost authority — `load` returns `None`, or the reload no longer satisfies the transition —
 /// resolves to the backend error via `From<`[`lifecycle::NotCurrentHolder`]`>`.
+///
+/// # Contention and termination
+///
+/// The loop is **unbounded**: under sustained contention it retries `load → decide →
+/// set-if-unchanged` indefinitely, with no fairness, timeout, or cancellation guarantee — each
+/// `false` from `cas` means the state moved under it, so it reloads and re-decides. Termination
+/// under pathological contention is **caller/runtime policy**, composed *around* this helper (a
+/// timeout, a cancellation token, a bound on attempts); the helper itself adds none of that and
+/// remains the minimal compare-and-set strategy. It is not a retry policy for the *work* a pact
+/// performs — that composes at the `Middleware` seam — only the concurrency retry for one atomic
+/// transition.
 pub async fn apply_via_cas<E, L, C, LFut, CFut>(
     load: L,
     cas: C,
@@ -256,20 +267,19 @@ mod tests {
 
         async fn apply(
             &self,
-            _retainer: &Retainer,
+            retainer: &Retainer,
             transition: &Transition<'_>,
         ) -> Result<(), NotHeld> {
             // One `Mutex` scope is the atomic boundary: load, decide, and store without releasing
-            // the lock. The transition carries the authority check, so the first record it accepts
-            // is the held pact.
+            // the lock. Authority is enforced by locating the record this retainer holds — as a
+            // durable backend loads its row by holder — not by trusting the transition to police it.
             let mut records = self.records.lock().unwrap();
-            for (_, state) in records.iter_mut() {
-                if let Ok(next) = transition(state) {
-                    *state = next;
-                    return Ok(());
-                }
-            }
-            Err(NotHeld)
+            let (_, state) = records
+                .iter_mut()
+                .find(|(_, state)| matches!(state, State::Held { retainer: held, .. } if held == retainer))
+                .ok_or(NotHeld)?;
+            *state = transition(state)?;
+            Ok(())
         }
     }
 
@@ -294,6 +304,25 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[tokio::test]
+    async fn apply_rejects_a_stranger_even_with_an_any_state_transition() {
+        let reg = MemAsync::seeded(vec![a_pact()], 1000);
+        let claim = reg
+            .claim(&["d"], Timestamp::from_millis(0))
+            .await
+            .unwrap()
+            .expect("a pact is claimable");
+        let stranger = Retainer::new(Uuid::new_v4());
+        // A transition that accepts any state must still be rejected: apply locates the record the
+        // stranger holds (none), so authority does not rest on the transition policing the holder.
+        let accept_any = |_state: &State| Ok::<State, lifecycle::NotCurrentHolder>(State::Settled);
+        assert_eq!(reg.apply(&stranger, &accept_any).await, Err(NotHeld));
+        // The held pact was untouched: the true holder still settles it.
+        reg.fulfill(&claim.retainer)
+            .await
+            .expect("the held state was untouched");
     }
 
     #[tokio::test]
