@@ -4,6 +4,53 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-30
+
+Relaxes backend thread-safety coloring, ships the `Policy` user-obligation trait, and
+calibrates a governance ambiguity found while scoping it. **Breaking** at the
+implementer/generic-caller surface (backend coloring); `Policy` and the governance
+clarification are additive.
+
+### Changed
+
+- **BREAKING: `Registry` and `AsyncRegistry` no longer imply `Send + Sync`.** An
+  `Rc`-based, single-threaded backend may now implement either binding and run the
+  sequential conformance suite; the OS-thread contention conformance entries state
+  `Send + Sync + 'static` themselves, at the boundary that actually shares an `Arc<R>`,
+  and async futures remain `Send`-agnostic. The pure `Transition` closure remains
+  `Send + Sync` independently. **Generic callers that move or share a backend across
+  threads must now add `Send + Sync` at that boundary themselves** — code that wrote
+  `R: Registry` or `R: AsyncRegistry` to imply thread safety no longer gets it implied.
+  Lifecycle operations, atomicity, dependencies, and Tianheng law are unchanged.
+
+### Added
+
+- **`Policy` trait and `Verdict` decision** in `pacta-executor` (re-exported through
+  `pacta`): `Policy::decide(attempts, &error)` governs only infrastructure-failure
+  disposition after a claimed pact's `Executor` returns `Err` — `Verdict::Continue` to
+  keep letting the claim lapse and be reclaimed, `Verdict::Concede` to settle it as a
+  terminal breach instead. It has no bearing on a clean business `Outcome`: the shipped
+  `Driver` already settles a clean `Outcome::Breached` as terminal, so there is no
+  "retry a business breach" decision for `Policy` to make. Replaces the inert `Policy`
+  value type removed in 0.1.0; validated by an in-workspace `#[cfg(test)]`-only reference
+  `Middleware`/`Executor` and tests, never shipped as public API itself. A concrete,
+  production-usable orchestration `Middleware` that consumes `Policy` stays sibling- or
+  consumer-owned and does not ship from this workspace.
+- **`pacta-governance` changelog footer-link reaction**: fails if any `## [X.Y.Z]`
+  version heading in this file has no matching `[X.Y.Z]: <url>` footer link, catching
+  the exact gap a first attempt at this release made.
+
+### Documentation
+
+- **`composition-governance` spec**: a user-obligation trait's in-workspace validator may
+  be `#[cfg(test)]`-only scaffolding never exposed as public API, distinct from a
+  publicly shippable, production-usable orchestration `Middleware` — resolving an
+  ambiguity between that requirement and its own "concrete orchestration stays sibling-
+  or consumer-owned" scenario, found while scoping the `Policy` trait above.
+- `BACKLOG.md`, `docs/domain-language.md`, `openspec/specs/public-facade/spec.md`, and all
+  affected crate READMEs brought current with the `Policy`/`Verdict` surface (previously,
+  0.2.2 had noted `Policy` as a removed, no-longer-live term).
+
 ## [0.2.2] - 2026-07-19
 
 Hardens the 0.2 backend-author contract so implementation, conformance, and documentation
@@ -216,6 +263,7 @@ First public release: the thin lifecycle foundation, not a complete durable runt
 - No ingress API (`Signal -> Pact` is user-provided, not a shipped surface).
 - No framework adapters (Tower, HTTP) and no retry/backoff/timeout orchestration.
 
+[0.3.0]: https://github.com/tacticaldoll/pacta/releases/tag/v0.3.0
 [0.2.2]: https://github.com/tacticaldoll/pacta/releases/tag/v0.2.2
 [0.2.1]: https://github.com/tacticaldoll/pacta/releases/tag/v0.2.1
 [0.2.0]: https://github.com/tacticaldoll/pacta/releases/tag/v0.2.0
