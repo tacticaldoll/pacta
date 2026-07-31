@@ -10,6 +10,7 @@ The overarching journey of Pacta is defined by these phases.
 - Core architectural axioms defined (`AGENTS.md`).
 - Pure, zero-dependency `Pact` and `Registry` trait defined (`pacta-contract`).
 - Executable governance via `tianheng` (`pacta-governance`).
+- CI, cargo-deny, rustdoc, clippy, fmt, and governance gates established.
 
 ### Phase 2: Execution Engine
 - Implement `pacta-driver`: The runtime loop that claims Pacts from a `Registry`
