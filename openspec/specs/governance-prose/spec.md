@@ -26,6 +26,9 @@ Pacta SHALL define authority for active prose so project documents do not create
 - **WHEN** `BACKLOG.md` lists future work
 - **THEN** it presents deferred decisions and candidate patterns rather than mandatory phases
 
+#### Scenario: The Definition of Done is single-sourced
+- **WHEN** the pre-commit gate list (the Definition of Done) is documented in active prose
+- **THEN** `AGENTS.md` states the complete list and other active prose points to it rather than restating a divergent subset, so the documented gates stay consistent across project prose
 ### Requirement: Active Prose Vocabulary Governance
 Pacta SHALL keep high-risk stale architecture vocabulary out of active project prose except where clearly marked as legacy or comparison context.
 

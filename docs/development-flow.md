@@ -39,19 +39,6 @@ Avoid:
 
 ## Definition Of Done
 
-Run these from the workspace root:
-
-```bash
-cargo build
-cargo test
-cargo clippy --all-targets -- -D warnings
-cargo fmt --all --check
-RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
-cargo deny check
-cargo run -p pacta-governance -- check --manifest-path Cargo.toml
-```
-
-CI runs the same gates on push and pull request. Rust style lives in these
-checks: rustfmt formats, clippy denies warnings, rustdoc denies documentation
-warnings, cargo-deny owns resolved supply-chain policy, and `pacta-governance`
-owns Tianheng architecture boundaries.
+`AGENTS.md` is the single source for the gate list — run its Definition of Done
+before checking off tasks or syncing specs. CI runs the same gates on push and pull
+request, plus an MSRV build.

@@ -20,6 +20,4 @@ Part of [Pacta](https://github.com/tacticaldoll/pacta).
 
 ## License
 
-Licensed under either of
-[Apache-2.0](https://github.com/tacticaldoll/pacta/blob/main/LICENSE-APACHE) or
-[MIT](https://github.com/tacticaldoll/pacta/blob/main/LICENSE-MIT), at your option.
+Licensed under either of [Apache-2.0](https://github.com/tacticaldoll/pacta/blob/main/LICENSE-APACHE) or [MIT](https://github.com/tacticaldoll/pacta/blob/main/LICENSE-MIT), at your option.
