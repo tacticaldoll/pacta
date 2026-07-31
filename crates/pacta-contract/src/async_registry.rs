@@ -55,10 +55,13 @@
 //!   constant.
 //! - **Runtime-owned heartbeat cadence.** Long work must [`heartbeat`](AsyncRegistry::heartbeat)
 //!   before its lease lapses; when and how often is the runtime's policy.
-//! - **Runtime and its coloring are yours.** This binding is deliberately `Send`-agnostic: it forces
-//!   no `Send` bound on its futures and pulls no runtime. Async, `Send`, and executor choice are the
-//!   consumer's to compose — a multi-threaded executor requires `Send`, which the consumer satisfies
-//!   at its own call site over a concrete backend. The contract carries no runtime property.
+//! - **Future coloring is yours.** This binding is deliberately `Send`-agnostic *at its futures*: it
+//!   forces no `Send` bound on the futures its methods return and pulls no runtime. Async and executor
+//!   choice are the consumer's to compose — a multi-threaded executor requires `Send` futures, which
+//!   the consumer satisfies at its own call site over a concrete backend. The one runtime-ish
+//!   requirement the contract *does* impose is that a backend **type** be `Send + Sync`
+//!   (thread-shareable) — a requirement of both the sync and async bindings, distinct from the
+//!   futures' coloring.
 //!
 //! Note the fence rule this binding inherits from the frozen contract: a holder whose lease has
 //! lapsed but whose pact **no one has reclaimed** can still settle (its retainer is still the

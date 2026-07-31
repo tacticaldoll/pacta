@@ -13,8 +13,10 @@ jobs:
       - name: build / test / clippy / fmt / doc
         run: |
           cargo build --workspace --all-features
+          cargo build --workspace --no-default-features
           cargo test --workspace --all-features
           cargo clippy --workspace --all-targets --all-features -- -D warnings
+          cargo clippy --workspace --no-default-features -- -D warnings
           cargo fmt --all --check
           RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 
