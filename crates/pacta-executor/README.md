@@ -9,6 +9,14 @@ input; `Middleware` decorates an executor into an executor — the Tower
 Orchestration such as retry, timeout, and rate limiting is deliberately deferred: it
 composes onto this seam as `Middleware`, it is not built in.
 
+`Policy` is the one user-obligation trait shipped for such a `Middleware` to consume:
+`Policy::decide(attempts, &error)` governs only infrastructure-failure disposition —
+`Verdict::Continue` to keep letting a claim lapse and be reclaimed, `Verdict::Concede`
+to settle it as a terminal breach instead. It has no bearing on a clean business
+`Outcome`, which the shipped `Driver` always settles as terminal. The concrete,
+publicly shippable `Middleware` that consumes a `Policy` stays sibling- or
+consumer-owned and does not ship from this crate.
+
 Composition is reified as three values: `Identity` (the no-op middleware — the empty stack
 and neutral element), `Stack<Inner, Outer>` (the closure property as a holdable value that
 is itself a `Middleware`), and `Composition` (a blind assembler that accumulates `Stack`
