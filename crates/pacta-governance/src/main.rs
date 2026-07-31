@@ -21,6 +21,8 @@ const PROSE_REASON: &str =
     "active prose must not reintroduce stale architecture-defining vocabulary";
 const AMBIENT_TIME_REASON: &str =
     "the core contract must read no ambient clock; time is injected at the Registry seam";
+const AMBIENT_TIME_UUID_REASON: &str =
+    "the core contract must not mint time-based UUIDs; identifiers carry no ambient clock";
 const FACADE_REASON: &str = "pacta is the curated published entrypoint. It may depend only on pacta-contract, pacta-executor, and pacta-driver, never on a backend or external framework.";
 const FACADE_KERNEL_REASON: &str = "the pacta facade is the compose-level surface: it must not re-export the sans-I/O kernel, which stays advanced-only and is reached through pacta-contract directly.";
 const FACADE_REEXPORT_REASON: &str =
@@ -29,19 +31,6 @@ const FACADE_NON_REEXPORT: &str = "non-re-export item in facade library";
 
 /// The facade source tree the re-exports-only scan guards, relative to the workspace root.
 const FACADE_SOURCE_DIR: &str = "crates/pacta/src";
-
-/// Current-time constructors forbidden inside the core contract. `pacta-contract`
-/// is allowed `uuid`, so the scan must catch uuid's clock constructors too, not
-/// only `std::time`; a `::now(`-only pattern would miss `now_v7(`.
-const AMBIENT_TIME_MARKERS: &[&str] = &[
-    "SystemTime::now",
-    "Instant::now",
-    "Uuid::now_v7",
-    "Uuid::now_v1",
-];
-
-/// The core source tree the ambient-time scan guards, relative to the workspace root.
-const CORE_SOURCE_DIR: &str = "crates/pacta-contract/src";
 
 const ACTIVE_PROSE_FILES: &[&str] = &[
     "AGENTS.md",
@@ -147,10 +136,25 @@ fn constitution() -> Constitution {
                 .restrict_dependencies_to(["pacta-contract", "pacta-executor", "pacta-driver"])
                 .because(FACADE_REASON),
         )
+        .boundary(
+            ModuleBoundary::in_crate("pacta-contract")
+                .module("crate")
+                .must_not_call_inline("std::time")
+                .ending_with(["now"])
+                .because(AMBIENT_TIME_REASON),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("pacta-contract")
+                .module("crate")
+                .must_not_call_inline("uuid")
+                .ending_with(["now_v7", "now_v1"])
+                .because(AMBIENT_TIME_UUID_REASON),
+        )
         .async_exposure_boundary(
             AsyncExposureBoundary::in_crate("pacta-contract")
                 .module("crate::kernel")
                 .must_not_expose_async_fn()
+                .including_submodules()
                 .because(KERNEL_ASYNC_REASON),
         )
         .signature_boundary(
@@ -177,17 +181,6 @@ fn main() -> ExitCode {
                 eprintln!(
                     "{}:{}: `{}` - {}",
                     violation.path, violation.line, violation.phrase, violation.reason
-                );
-            }
-            return ExitCode::from(1);
-        }
-
-        if let Err(violations) = check_no_ambient_time(&root) {
-            eprintln!("pacta ambient-time governance failed: {AMBIENT_TIME_REASON}");
-            for violation in violations {
-                eprintln!(
-                    "{}:{}: `{}`",
-                    violation.path, violation.line, violation.marker
                 );
             }
             return ExitCode::from(1);
@@ -280,46 +273,6 @@ struct SourceViolation {
     path: String,
     line: usize,
     marker: &'static str,
-}
-
-fn check_no_ambient_time(root: &Path) -> Result<(), Vec<SourceViolation>> {
-    let mut violations = Vec::new();
-
-    for file in collect_rs_files(&root.join(CORE_SOURCE_DIR)) {
-        let Ok(content) = fs::read_to_string(&file) else {
-            continue;
-        };
-        let relative = file
-            .strip_prefix(root)
-            .unwrap_or(&file)
-            .to_string_lossy()
-            .into_owned();
-        violations.extend(check_source_content(&relative, &content));
-    }
-
-    if violations.is_empty() {
-        Ok(())
-    } else {
-        Err(violations)
-    }
-}
-
-fn check_source_content(path: &str, content: &str) -> Vec<SourceViolation> {
-    let mut violations = Vec::new();
-
-    for (index, line) in content.lines().enumerate() {
-        for marker in AMBIENT_TIME_MARKERS {
-            if line.contains(*marker) {
-                violations.push(SourceViolation {
-                    path: path.to_owned(),
-                    line: index + 1,
-                    marker,
-                });
-            }
-        }
-    }
-
-    violations
 }
 
 fn check_facade_reexports_only(root: &Path) -> Result<(), Vec<SourceViolation>> {
@@ -484,40 +437,6 @@ pacta-driver = { path = "../pacta-driver" }
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
 
         assert_eq!(check_active_prose(&root), Ok(()));
-    }
-
-    #[test]
-    fn current_core_reads_no_ambient_time() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-
-        assert_eq!(check_no_ambient_time(&root), Ok(()));
-    }
-
-    #[test]
-    fn ambient_time_reads_are_rejected() {
-        assert_eq!(
-            check_source_content("lib.rs", "let now = SystemTime::now();\n"),
-            vec![SourceViolation {
-                path: "lib.rs".to_owned(),
-                line: 1,
-                marker: "SystemTime::now",
-            }]
-        );
-        assert_eq!(
-            check_source_content("lib.rs", "let id = Uuid::now_v7();\n"),
-            vec![SourceViolation {
-                path: "lib.rs".to_owned(),
-                line: 1,
-                marker: "Uuid::now_v7",
-            }]
-        );
-        assert!(
-            check_source_content(
-                "lib.rs",
-                "pub fn from_millis(ms: u64) -> Self { Self(ms) }\n"
-            )
-            .is_empty()
-        );
     }
 
     #[test]
