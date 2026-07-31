@@ -176,6 +176,22 @@ proposal.
   Opening `Outcome` later would be breaking and is not anticipated. Additive freeze work
   left for post-1.0 (safe because additive): `#[must_use]` on result types, serde/derive
   additions, and `cargo-semver-checks` against the published 0.1.0 baseline from 0.1.1 on.
+- Packaging metadata has no governance teeth. The `release-packaging` requirements
+  (crate-specific `readme`, `keywords`/`categories`, MSRV, the version-carrying
+  dependency graph) are verified by prose review and tooling (`cargo publish --dry-run`,
+  CI), not by a `pacta-governance` reaction — the governance crate reads no `Cargo.toml`
+  metadata today. A file-presence/metadata check (e.g. every publishable crate resolves a
+  crate-local README, not the shared workspace root) could live there, consistent with the
+  existing active-prose checks, so the crate-specific-readme requirement cannot silently
+  regress. Deferred as asymmetric to add for one field alone; recorded for a future
+  governance pass. Not decided here.
+- The 0.1.1 version bump and changelog are a deferred, standalone step. Content for 0.1.1
+  (per-crate READMEs and the license section first; code-base fixes to follow) lands on
+  `release/0.1.1` with manifests left at `0.1.0`. The `workspace.package.version` bump, the
+  `[workspace.dependencies]` requirement bump (`0.1.0` → `0.1.1`), and the `CHANGELOG.md`
+  `0.1.1` entry are one purely mechanical release-finalization PR run once all 0.1.1
+  content has landed — keeping every content PR free of release bookkeeping and the
+  changelog a one-shot, honest record of the whole release.
 
 ## Explicitly Deferred
 
