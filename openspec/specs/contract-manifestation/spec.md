@@ -98,3 +98,4 @@ transient decisions to be performed now, not durable state.
 #### Scenario: Kernel protocol stays non-serializable
 - **WHEN** the kernel driving-protocol types are inspected
 - **THEN** they do not implement serde, because persisting an in-flight `Directive` or `Notice` would contradict the kernel's transient, sans-I/O nature
+
