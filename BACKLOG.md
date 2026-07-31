@@ -118,6 +118,14 @@ proposal.
   *exposure* as Pacta approaches 1.0 (e.g. feature-gating it, so a consumer who does
   not build a custom runtime never sees it) is an option — narrowing exposure, NOT
   deprecating the shipped, governed kernel. Not decided here.
+- The standalone composition examples were retired. The `pacta` and `pacta-driver`
+  `examples/compose.rs` targets duplicated a proof the facade `lib.rs` doctest already
+  carries more strongly — the doctest runs and asserts under `cargo test`, renders on
+  docs.rs, and imports only from `pacta`, whereas an `examples/` target is compile-only
+  and (shipped in the tarball) is never rendered to a consumer. The composition proof is
+  now the facade doctest; the core-crate composition stays proven by `pacta-driver`'s
+  unit tests. Reintroducing a runnable `examples/` playground later is an option if a
+  richer, non-duplicative example earns its keep; not decided here.
 
 ## Explicitly Deferred
 
