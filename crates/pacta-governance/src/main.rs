@@ -16,6 +16,8 @@ const DRIVER_REASON: &str = "pacta-driver is mechanical runtime glue. It may dep
 const GOVERNANCE_REASON: &str = "the governance gate must stay independent of the workspace graph it judges: it may depend only on governance-family tooling (tianheng and its guibiao coverage core), never on a workspace crate under judgment.";
 const KERNEL_ASYNC_REASON: &str = "the sans-I/O step-driver kernel (crate::kernel) must stay runtime-agnostic: its public API must never expose an async fn, so no runtime shape leaks into the contract.";
 const LIFECYCLE_ASYNC_REASON: &str = "the colorless lifecycle-state kernel (crate::lifecycle) is the single source both the sync and async Registry bindings compose over; it must never expose an async fn, so it stays colorless and the two bindings cannot drift by coloring the shared semantics.";
+const KERNEL_IMPL_TRAIT_REASON: &str = "the sans-I/O step-driver kernel (crate::kernel) returns named types, not existentials: it must expose no return-position impl Trait. The async-exposure tooth catches only a literal async fn, but a fn -> impl Future desugars to the same runtime coloring, so this closes that hole.";
+const LIFECYCLE_IMPL_TRAIT_REASON: &str = "the colorless lifecycle-state kernel (crate::lifecycle) is the single source both Registry bindings compose over; a return-position impl Trait (e.g. -> impl Future) would color it and let the two bindings drift, so it exposes no impl Trait — the RPIT analogue of the async-fn tooth.";
 const KERNEL_NO_SERDE_REASON: &str = "the sans-I/O kernel is transient driving protocol, not durable state: it must not acquire Serialize/Deserialize, so persisting an in-flight directive or notice can never leak into the contract. Durable records (Pact, Claim, Retainer, Timestamp) carry serde; the kernel must not.";
 const CORE_NO_IO_REASON: &str = "the sans-I/O core contract performs no I/O: no code in pacta-contract (the kernel included) may call into std::io/fs/net/process; I/O lives in runtimes and backends outside the core. Coverage is partial by nature (I/O entry points cannot be enumerated, and macro-expanded I/O such as println! is invisible to a source scan), so this tooth complements review rather than replacing it.";
 const MEMORY_REASON: &str = "pacta-memory is a registry backend outside the core. It may depend only on pacta-contract and uuid, never on drivers, executors, or other backends.";
@@ -208,6 +210,18 @@ fn constitution() -> Constitution {
                 .must_not_expose_async_fn()
                 .including_submodules()
                 .because(LIFECYCLE_ASYNC_REASON),
+        )
+        .impl_trait_boundary(
+            ImplTraitBoundary::in_crate("pacta-contract")
+                .module("crate::kernel")
+                .must_not_expose_impl_trait()
+                .because(KERNEL_IMPL_TRAIT_REASON),
+        )
+        .impl_trait_boundary(
+            ImplTraitBoundary::in_crate("pacta-contract")
+                .module("crate::lifecycle")
+                .must_not_expose_impl_trait()
+                .because(LIFECYCLE_IMPL_TRAIT_REASON),
         )
         .forbidden_marker_boundary(
             ForbiddenMarkerBoundary::in_crate("pacta-contract")
@@ -523,6 +537,56 @@ pacta-driver = { path = "../pacta-driver" }
     }
 
     #[test]
+    fn core_no_io_reactions_fire() {
+        // Inject a synchronous I/O call for each guarded prefix into a fixture pacta-contract and
+        // assert every boundary reports a violation — proof the tooth bites, which a clean-workspace
+        // pass cannot give (it cannot tell a biting boundary from a mistyped/mistargeted one).
+        let workspace = TempWorkspace::new("pacta-governance-core-io-leak");
+        workspace.write_package("tower", "");
+        workspace.write_package_with_source(
+            "pacta-contract",
+            "",
+            "pub fn leak() {\n    let _ = std::fs::metadata(\".\");\n    let _ = std::io::stdin();\n    let _ = std::net::TcpListener::bind(\"0.0.0.0:0\");\n    std::process::abort();\n}\n",
+        );
+        workspace.write_package(
+            "pacta-executor",
+            "[dependencies]\npacta-contract = { path = \"../pacta-contract\" }\n",
+        );
+        workspace.write_package(
+            "pacta-driver",
+            "[dependencies]\npacta-contract = { path = \"../pacta-contract\" }\npacta-executor = { path = \"../pacta-executor\" }\n",
+        );
+        workspace.write_package("pacta-governance", "");
+        workspace.write_package("pacta-memory", "");
+        workspace.write_package("pacta-conformance", "");
+        workspace.write_package("pacta-contract-async", "");
+        workspace.write_package("pacta-memory-async", "");
+        workspace.write_package(
+            "pacta",
+            "[dependencies]\npacta-contract = { path = \"../pacta-contract\" }\npacta-executor = { path = \"../pacta-executor\" }\npacta-driver = { path = \"../pacta-driver\" }\n",
+        );
+        workspace.write_root_manifest();
+
+        let outcome = check(
+            constitution().static_boundaries(),
+            &workspace.path.join("Cargo.toml"),
+        );
+
+        let Outcome::Violations(report) = outcome else {
+            panic!("expected core no-I/O violations, got {outcome:?}");
+        };
+        for prefix in ["std::io", "std::fs", "std::net", "std::process"] {
+            assert!(
+                report.violations.iter().any(|violation| {
+                    let id = violation.id();
+                    id.target == prefix && id.rule == "inline symbol path confined to module"
+                }),
+                "expected the {prefix} no-I/O boundary to fire: {report:?}"
+            );
+        }
+    }
+
+    #[test]
     fn current_active_prose_satisfies_governance() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
 
@@ -813,6 +877,50 @@ pub use pacta_driver::{
                 id.target == "crate::kernel" && id.rule == "must not acquire trait"
             }),
             "expected the kernel no-serde boundary to fire: {report:?}"
+        );
+    }
+
+    #[test]
+    fn kernel_impl_trait_reaction_fires() {
+        // A `fn -> impl Future` is not an `async fn`, so the async-exposure tooth misses it; the
+        // impl-trait boundary must catch the return-position existential.
+        let outcome = semantic_reaction_outcome(
+            "pacta-governance-kernel-impl-trait-leak",
+            "pub mod kernel {\n    pub fn leak() -> impl core::future::Future<Output = ()> {\n        async {}\n    }\n}\n",
+            "",
+            "",
+        );
+
+        let Outcome::Violations(report) = outcome else {
+            panic!("expected a kernel impl-trait violation, got {outcome:?}");
+        };
+        assert!(
+            report.violations.iter().any(|violation| {
+                let id = violation.id();
+                id.target == "crate::kernel" && id.rule == "must not expose impl trait"
+            }),
+            "expected the kernel impl-trait boundary to fire: {report:?}"
+        );
+    }
+
+    #[test]
+    fn lifecycle_impl_trait_reaction_fires() {
+        let outcome = semantic_reaction_outcome(
+            "pacta-governance-lifecycle-impl-trait-leak",
+            "pub mod lifecycle {\n    pub fn leak() -> impl core::future::Future<Output = ()> {\n        async {}\n    }\n}\n",
+            "",
+            "",
+        );
+
+        let Outcome::Violations(report) = outcome else {
+            panic!("expected a lifecycle impl-trait violation, got {outcome:?}");
+        };
+        assert!(
+            report.violations.iter().any(|violation| {
+                let id = violation.id();
+                id.target == "crate::lifecycle" && id.rule == "must not expose impl trait"
+            }),
+            "expected the lifecycle impl-trait boundary to fire: {report:?}"
         );
     }
 
