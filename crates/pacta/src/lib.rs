@@ -12,6 +12,9 @@
 //!   mint a fresh [`Retainer`]), so a legal `Registry` is implementable from `pacta` alone;
 //! - execution composition — [`Executor`], [`Execution`], [`Middleware`], and the
 //!   composition mechanism [`Identity`], [`Stack`], and [`Composition`];
+//! - the user-owned infrastructure-failure disposition — the [`Policy`] trait and its
+//!   [`Verdict`] decision, consulted only for an [`Executor`]'s infrastructure failures,
+//!   never for a clean business [`Outcome`];
 //! - the runtime driver — [`Driver`], [`Step`], [`DriverError`].
 //!
 //! It carries no logic of its own: every item here is a re-export.
@@ -160,4 +163,6 @@ pub use pacta_contract::{
     Claim, Outcome, Pact, Registry, Retainer, Settlement, Timestamp, Transition, Uuid, lifecycle,
 };
 pub use pacta_driver::{Driver, DriverError, Step};
-pub use pacta_executor::{Composition, Execution, Executor, Identity, Middleware, Stack};
+pub use pacta_executor::{
+    Composition, Execution, Executor, Identity, Middleware, Policy, Stack, Verdict,
+};
