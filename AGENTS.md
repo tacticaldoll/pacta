@@ -39,6 +39,12 @@ Before proposing or writing code, protect these axioms:
   phases.
 - `AGENTS.md` is operating protocol for agents and contributors.
 
+Decision provenance lives in git — the commit body and pull request that made a
+change record its rationale. Forward-looking or reversed decisions are noted in
+`BACKLOG.md`. There is no separate architecture-decision-record file class; the
+living documents above are the single source of truth for current state, and git is
+the source of truth for why it changed.
+
 If these documents conflict, fix the conflict through an OpenSpec change before
 implementing feature code.
 
@@ -139,8 +145,8 @@ Use Conventional Commits: `type(scope): summary`.
 
 ## Definition Of Done
 
-Run these from the workspace root before checking off implementation tasks,
-syncing specs, or archiving a change:
+Run these from the workspace root before checking off implementation tasks or
+syncing specs:
 
 ```bash
 cargo build --workspace
