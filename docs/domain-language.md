@@ -1,8 +1,9 @@
 # Pacta Domain Language
 
 Pacta uses contract and arbitration terminology for public APIs, specs, and
-user-facing documentation. These terms replace generic queue vocabulary where
-the concept is part of Pacta's public model.
+user-facing documentation. The vocabulary is governance, not decoration: it
+keeps the product centered on durable user-defined obligations instead of
+generic queue-runtime behavior.
 
 ## Core Entities
 
@@ -37,6 +38,21 @@ the concept is part of Pacta's public model.
   execution. Use it when discussing implementation mechanics, not as the main
   public role.
 
+## Product Boundary
+
+Pacta's names express a thin, elegant contract/arbitration worldview:
+
+- obligations are durable pacts, not generic jobs
+- groupings are dockets, not broker topics
+- processing authority is claimed and retained, not treated as an opaque queue
+  pop
+- failed or exhausted obligations go to review, not into a storage-owned policy
+  sink
+
+New vocabulary must preserve this restraint. It may use ordinary engineering
+terms when they make mechanics clearer, but it must not let adapter, benchmark,
+or queue terminology become the governing public shape.
+
 ## Engineering Boundary
 
 Public APIs, OpenSpec requirements, examples, and user-facing documentation use
@@ -44,8 +60,9 @@ the Pacta domain language. Private implementation may use mechanical terms such
 as driver, heartbeat, retry, timeout, scheduler, or middleware when those terms
 make behavior clearer.
 
-Tower is an adapter target, not Pacta's core public identity. Tower vocabulary
-belongs in adapter-owned crates, not in the first-layer runtime API.
+Framework integration is adapter scope, not Pacta's core public identity.
+External framework vocabulary belongs in adapter-owned crates, not in the
+first-layer runtime API.
 
 ## Legacy Mapping
 
