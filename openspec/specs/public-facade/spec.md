@@ -8,7 +8,8 @@ Pacta SHALL provide a single facade crate `pacta` that is the curated public
 entrypoint to the compose-level API. The facade SHALL re-export the public items a
 downstream consumer needs to compose the lifecycle end to end — implement
 `Registry`, implement `Executor` and `Middleware`, compose middleware through the
-empty-stack value, the reified stack value, and the blind assembler, and run the
+empty-stack value, the reified stack value, and the blind assembler, decide
+infrastructure-failure disposition through `Policy` and `Verdict`, and run the
 `Driver` — drawing them from `pacta-contract`, `pacta-executor`, and `pacta-driver`.
 Because a legal `Registry` backend is written against the transition port, the facade
 SHALL also re-export the backend-author lifecycle surface — the colorless
@@ -21,7 +22,7 @@ backend crate.
 
 #### Scenario: Facade re-exports the compose-level surface
 - **WHEN** a downstream consumer depends only on `pacta`
-- **THEN** it can name `Pact`, `Claim`, `Retainer`, `Timestamp`, `Outcome`, `Settlement`, and `Registry`; `Executor`, `Execution`, `Middleware`, `Identity`, `Stack`, and `Composition`; and `Driver`, `Step`, and `DriverError`, without depending on the individual core crates directly
+- **THEN** it can name `Pact`, `Claim`, `Retainer`, `Timestamp`, `Outcome`, `Settlement`, and `Registry`; `Executor`, `Execution`, `Middleware`, `Identity`, `Stack`, and `Composition`; `Policy` and `Verdict`; and `Driver`, `Step`, and `DriverError`, without depending on the individual core crates directly
 
 #### Scenario: Facade re-exports the backend-author lifecycle path
 - **WHEN** a downstream consumer implements a `Registry` backend using only `pacta`
