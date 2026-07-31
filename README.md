@@ -16,13 +16,14 @@ patterns.
 `Signal -> Pact` is user-provided ingress: you turn your own events into pacts.
 Pacta ships the lifecycle from `Pact` onward, not an ingress API.
 
-## Status (0.1.1)
+## Status (0.1.2)
 
-0.1.1 is the thin lifecycle foundation, not a complete durable runtime. It ships:
+0.1.2 is the thin lifecycle foundation, not a complete durable runtime. It ships:
 
 - a curated **facade** (`pacta`) — the recommended single entrypoint you depend on;
 - the lifecycle **contract** (`Registry`) and a sans-I/O lifecycle **kernel**;
 - **lease/lapse** semantics with injected time (the core reads no ambient clock);
+- **deferred reclaim** on release (`release(retainer, reclaimable_at)`) — the durable-retry primitive;
 - execution **composition** vocabulary (`Executor`, `Middleware`);
 - a mechanical **driver** that runs the kernel against a registry and executor;
 - an in-memory **reference backend** (`pacta-memory`);
@@ -31,7 +32,9 @@ Pacta ships the lifecycle from `Pact` onward, not an ingress API.
 
 Durable/persistent backends deliberately live **outside** this workspace and prove
 themselves against the conformance suite. No ingress API, framework adapters, or
-retry/backoff/timeout orchestration ship in 0.1.1 — see `CHANGELOG.md`.
+retry/backoff/timeout *orchestration* ship in 0.1.2 — the deferred-reclaim *primitive*
+`release` does, and retry composes on top of it at the `Middleware` seam. See
+`CHANGELOG.md`.
 
 ## Why Pacta
 
