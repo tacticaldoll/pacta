@@ -13,10 +13,9 @@ publish.workspace = true
 
 [dependencies]
 pacta-contract.workspace = true
-pacta-contract-async = { workspace = true, optional = true }
 uuid.workspace = true
 
 [features]
-# Opt-in async runner. Off by default so a sync-only consumer of the suite never
-# pulls the async binding or an async runtime into its build graph.
-async = ["dep:pacta-contract-async"]
+# Opt-in async runner. Off by default so a sync-only consumer of the suite compiles no async
+# binding code and pulls no async runtime. Enables pacta-contract's async binding.
+async = ["pacta-contract/async"]

@@ -1,17 +1,16 @@
-//! An asynchronous binding of the Pacta `Registry` contract.
+//! The asynchronous binding of the Pacta [`Registry`](crate::Registry) contract, behind the `async`
+//! feature.
 //!
-//! Real durable backends do async I/O and cannot implement the synchronous
-//! [`pacta_contract::Registry`]. [`AsyncRegistry`] is the same frozen five-op contract, made
-//! asynchronous — a *second binding*, not new semantics. The lifecycle semantics are
-//! single-sourced in [`pacta_contract::lifecycle`], which this binding composes over, so the
-//! sync and async bindings cannot drift.
+//! Real durable backends do async I/O and cannot implement the synchronous [`Registry`](crate::Registry).
+//! [`AsyncRegistry`] is the same frozen five-op contract, made asynchronous — a *second binding*, not
+//! new semantics. The lifecycle semantics are single-sourced in [`crate::lifecycle`], which this
+//! binding composes over, so the sync and async bindings cannot drift.
 //!
 //! A backend implements only two primitives — [`claim`](AsyncRegistry::claim) (a native selection
 //! carrying the eligibility invariant) and [`apply`](AsyncRegistry::apply) (the transition port) —
 //! plus a [`lease_millis`](AsyncRegistry::lease_millis) accessor. The four transition operations
 //! (heartbeat, fulfill, breach, release) are default methods that call `apply` with the
-//! corresponding [`lifecycle`] decision, so their semantics come from
-//! the shared kernel.
+//! corresponding [`crate::lifecycle`] decision, so their semantics come from the shared kernel.
 //!
 //! # The transition port
 //!
@@ -28,8 +27,8 @@
 //! # Both halves of the contract
 //!
 //! This binding does not re-specify lifecycle behavior — it references the governed truth in
-//! [`pacta_contract::lifecycle`] and `pacta-conformance`. But an implementer and a consumer each
-//! owe the contract obligations, made explicit here so reading only this crate shows both halves.
+//! [`crate::lifecycle`] and `pacta-conformance`. But an implementer and a consumer each owe the
+//! contract obligations, made explicit here so reading only this surface shows both halves.
 //!
 //! ## What a backend must satisfy (implementer half)
 //!
@@ -65,8 +64,6 @@
 //! lapsed but whose pact **no one has reclaimed** can still settle (its retainer is still the
 //! current holder) — reclaim, not expiry, rotates authority.
 
-#![forbid(unsafe_code)]
-#![warn(missing_docs)]
 // The async binding is deliberately `Send`-agnostic: the runtime is the consumer's, so its futures
 // carry no `Send` bound and a consumer composes `Send` at its concrete call site, where its executor
 // needs it. Native `async fn` in traits (AFIT) is what expresses that — `#[async_trait]` would force
@@ -76,19 +73,14 @@
 
 use core::future::Future;
 
-use pacta_contract::lifecycle::{self, State};
-use pacta_contract::{Claim, Retainer, Timestamp};
+use crate::lifecycle::{self, State};
+use crate::{Claim, Retainer, Timestamp, Transition};
 
-/// The transition port's decision type, shared with the sync binding so the port is one shape.
-/// A pure kernel decision (a `lifecycle::on_X`), `Send + Sync` so [`apply`](AsyncRegistry::apply)'s
-/// future stays `Send` across `.await`.
-pub use pacta_contract::Transition;
-
-/// An asynchronous [`pacta_contract::Registry`]: the same frozen five-op contract, made async.
+/// An asynchronous [`Registry`](crate::Registry): the same frozen five-op contract, made async.
 ///
 /// Backends implement the two primitives ([`claim`](Self::claim), [`apply`](Self::apply)) and the
 /// [`lease_millis`](Self::lease_millis) accessor; the four transition operations are provided as
-/// default methods composing over [`pacta_contract::lifecycle`] through [`apply`](Self::apply).
+/// default methods composing over [`crate::lifecycle`] through [`apply`](Self::apply).
 pub trait AsyncRegistry: Send + Sync {
     /// Error returned by the backend. It must be able to represent a lost/absent authority, so
     /// the shared kernel's [`lifecycle::NotCurrentHolder`] converts into it.
@@ -205,12 +197,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pacta_contract::Pact;
+    use crate::Pact;
     use std::sync::Mutex;
     use uuid::Uuid;
 
     /// A trivial in-memory async backend implementing only the two primitives, to prove the five
-    /// ops emerge through the defaults. Not a reference backend — that is `pacta-memory-async`.
+    /// ops emerge through the defaults. Not a reference backend — that is `pacta-memory`'s async one.
     struct MemAsync {
         records: Mutex<Vec<(Pact, State)>>,
         lease_millis: u64,

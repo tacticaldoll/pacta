@@ -84,9 +84,9 @@ away from the prior retainer.
 The conformance suite SHALL verify an `AsyncRegistry` backend against the same lifecycle scenarios it
 verifies sync `Registry` backends against, so the async binding is held to the same correctness
 contract as the sync binding. The async runner SHALL reuse the sync suite's scenarios rather than a
-duplicated scenario set, so sync and async coverage cannot drift. The async runner and its dependency
-on the async binding SHALL be gated so a sync-only consumer of the conformance suite pulls no async
-binding dependency and no async runtime.
+duplicated scenario set, so sync and async coverage cannot drift. The async runner SHALL be gated
+behind the conformance suite's `async` feature, so a sync-only consumer that does not enable it
+compiles no async binding code and no async runtime.
 
 #### Scenario: The async binding runs the same scenarios
 - **WHEN** an `AsyncRegistry` backend is subjected to the async conformance runner
@@ -99,9 +99,9 @@ binding dependency and no async runtime.
 - **THEN** it drives the same scenario definition the sync suite uses rather than a parallel copy, so
   a change to a scenario applies to both bindings at once
 
-#### Scenario: Sync-only consumers pull no async dependency
-- **WHEN** a sync-only consumer builds the conformance suite without opting into the async runner
-- **THEN** the build pulls neither the async binding crate nor an async runtime
+#### Scenario: Sync-only consumers compile no async
+- **WHEN** a sync-only consumer builds the conformance suite without enabling its `async` feature
+- **THEN** the build compiles no async binding code and pulls no async runtime, because the async runner is behind the feature
 
 ### Requirement: Conformance Covers Concurrent Transition Contention
 The conformance suite SHALL provide a portable contention check that verifies concurrent transitions

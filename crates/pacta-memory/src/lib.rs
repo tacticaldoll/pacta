@@ -1,14 +1,15 @@
-//! An in-memory [`Registry`] backend with real lease and lapse semantics.
+//! In-memory reference [`Registry`] backends with real lease and lapse semantics.
 //!
-//! This is a **reference** backend, not a durable or production one: it holds pacts
-//! in memory, so nothing survives the process. It exists to demonstrate correct
-//! lifecycle semantics and to calibrate against — durable backends live outside this
-//! workspace and prove themselves against `pacta-conformance` just as this one does.
+//! These are **reference** backends, not durable or production ones: they hold pacts in memory, so
+//! nothing survives the process. They exist to demonstrate correct lifecycle semantics and to
+//! calibrate against — durable backends live outside this workspace and prove themselves against
+//! `pacta-conformance` just as these do.
 //!
-//! It owns only storage and retainer minting; every eligibility decision and state
-//! transition is delegated to the shared, pure [`pacta_contract::lifecycle`] kernel, so
-//! the lifecycle semantics are single-sourced and cannot drift from any other backend.
-//! It reads no clock — time is injected into `claim` and `heartbeat`.
+//! [`MemoryRegistry`] implements the synchronous [`Registry`]. Behind the `async` feature,
+//! [`MemoryRegistryAsync`] implements [`pacta_contract::AsyncRegistry`] over the **same** private
+//! store, so the two bindings share one storage and cannot drift. Every eligibility decision and
+//! state transition is delegated to the shared, pure [`pacta_contract::lifecycle`] kernel; the store
+//! reads no clock — time is injected into `claim` and `heartbeat`.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -19,7 +20,7 @@ use pacta_contract::lifecycle::{self, State};
 use pacta_contract::{Claim, Pact, Registry, Retainer, Timestamp, Transition};
 use uuid::Uuid;
 
-/// The error a memory registry returns when a retainer is not the current holder,
+/// The error a memory backend returns when a retainer is not the current holder,
 /// or when a heartbeat arrives after its lease has already lapsed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NotHeld;
@@ -32,15 +33,86 @@ impl std::fmt::Display for NotHeld {
 
 impl std::error::Error for NotHeld {}
 
+impl From<lifecycle::NotCurrentHolder> for NotHeld {
+    fn from(_: lifecycle::NotCurrentHolder) -> Self {
+        NotHeld
+    }
+}
+
 struct Record {
     pact: Pact,
     state: State,
 }
 
-/// An in-memory registry seeded with a fixed set of pacts.
-pub struct MemoryRegistry {
+/// The shared in-memory store: storage, retainer minting, and the claim-select / transition-apply
+/// logic. Both the sync and async backends wrap one of these, so their behavior is single-sourced.
+/// It owns no I/O beyond a `Mutex`; every decision is the shared `lifecycle` kernel's.
+struct Store {
     records: Mutex<Vec<Record>>,
     lease_millis: u64,
+}
+
+impl Store {
+    fn seeded(pacts: Vec<Pact>, lease_millis: u64) -> Self {
+        Self {
+            records: Mutex::new(
+                pacts
+                    .into_iter()
+                    .map(|pact| Record {
+                        pact,
+                        state: State::Available,
+                    })
+                    .collect(),
+            ),
+            lease_millis,
+        }
+    }
+
+    fn lease_millis(&self) -> u64 {
+        self.lease_millis
+    }
+
+    fn claim(&self, dockets: &[&str], now: Timestamp) -> Option<Claim> {
+        let mut records = self
+            .records
+            .lock()
+            .expect("registry mutex should not be poisoned");
+        // Storage picks a candidate on the requested dockets; the kernel decides
+        // eligibility (available / lapsed hold / reclaimable defer / settled).
+        let index = records.iter().position(|record| {
+            dockets.contains(&record.pact.docket.as_str())
+                && lifecycle::is_claimable(&record.state, now)
+        })?;
+        // Mint a retainer only on a successful claim; the kernel produces the held state.
+        let retainer = Retainer::new(Uuid::new_v4());
+        records[index].state = lifecycle::on_claim(&retainer, now, self.lease_millis);
+        let expiry = lifecycle::lease_expiry(now, self.lease_millis);
+        Some(Claim::new(records[index].pact.clone(), retainer, expiry))
+    }
+
+    /// Apply a lifecycle transition within one `Mutex` scope (load, decide, and store without
+    /// releasing the lock, so there is no load-then-store race). The `transition` carries the
+    /// authority check — it fails on any state the retainer does not hold — so scanning for the
+    /// first record it accepts locates the held pact; a durable backend would instead load by
+    /// `retainer`, and this in-memory scan is equivalent.
+    fn apply(&self, transition: &Transition<'_>) -> Result<(), NotHeld> {
+        let mut records = self
+            .records
+            .lock()
+            .expect("registry mutex should not be poisoned");
+        for record in records.iter_mut() {
+            if let Ok(next) = transition(&record.state) {
+                record.state = next;
+                return Ok(());
+            }
+        }
+        Err(NotHeld)
+    }
+}
+
+/// An in-memory synchronous registry seeded with a fixed set of pacts.
+pub struct MemoryRegistry {
+    store: Store,
 }
 
 impl MemoryRegistry {
@@ -55,16 +127,7 @@ impl MemoryRegistry {
     #[must_use]
     pub fn seeded(pacts: Vec<Pact>, lease_millis: u64) -> Self {
         Self {
-            records: Mutex::new(
-                pacts
-                    .into_iter()
-                    .map(|pact| Record {
-                        pact,
-                        state: State::Available,
-                    })
-                    .collect(),
-            ),
-            lease_millis,
+            store: Store::seeded(pacts, lease_millis),
         }
     }
 }
@@ -73,53 +136,64 @@ impl Registry for MemoryRegistry {
     type Error = NotHeld;
 
     fn claim(&self, dockets: &[&str], now: Timestamp) -> Result<Option<Claim>, Self::Error> {
-        let mut records = self
-            .records
-            .lock()
-            .expect("registry mutex should not be poisoned");
-        // Storage picks a candidate on the requested dockets; the kernel decides
-        // eligibility (available / lapsed hold / reclaimable defer / settled).
-        let claimable = records.iter().position(|record| {
-            dockets.contains(&record.pact.docket.as_str())
-                && lifecycle::is_claimable(&record.state, now)
-        });
-
-        // Mint a retainer only on a successful claim; the kernel produces the held state.
-        let Some(index) = claimable else {
-            return Ok(None);
-        };
-        let retainer = Retainer::new(Uuid::new_v4());
-        records[index].state = lifecycle::on_claim(&retainer, now, self.lease_millis);
-        let expiry = lifecycle::lease_expiry(now, self.lease_millis);
-        Ok(Some(Claim::new(
-            records[index].pact.clone(),
-            retainer,
-            expiry,
-        )))
+        Ok(self.store.claim(dockets, now))
     }
 
     fn lease_millis(&self) -> u64 {
-        self.lease_millis
+        self.store.lease_millis()
     }
 
-    /// Apply a lifecycle transition to the one record its current holder owns, within a
-    /// single `Mutex` scope. The `transition` carries the authority check — it fails on any
-    /// state the retainer does not hold — so scanning for the first record it accepts locates
-    /// the held pact; a durable backend would instead load by `retainer`, and the in-memory
-    /// scan is equivalent. The atomic scope here is one lock hold: load, decide, and store
-    /// happen without releasing it, so there is no load-then-store race.
     fn apply(&self, _retainer: &Retainer, transition: &Transition<'_>) -> Result<(), Self::Error> {
-        let mut records = self
-            .records
-            .lock()
-            .expect("registry mutex should not be poisoned");
-        for record in records.iter_mut() {
-            if let Ok(next) = transition(&record.state) {
-                record.state = next;
-                return Ok(());
-            }
+        self.store.apply(transition)
+    }
+}
+
+/// An in-memory asynchronous registry seeded with a fixed set of pacts — the reference
+/// [`AsyncRegistry`](pacta_contract::AsyncRegistry) backend, over the same private store as
+/// [`MemoryRegistry`]. Its I/O is trivial (a `Mutex`), so its `async fn`s are ready futures, but it
+/// exercises the exact same async surface a durable backend implements.
+#[cfg(feature = "async")]
+pub struct MemoryRegistryAsync {
+    store: Store,
+}
+
+#[cfg(feature = "async")]
+impl MemoryRegistryAsync {
+    /// Create an empty registry that leases claims for `lease_millis`.
+    #[must_use]
+    pub fn new(lease_millis: u64) -> Self {
+        Self::seeded(Vec::new(), lease_millis)
+    }
+
+    /// Create a registry holding `pacts`, each available to claim, leasing claims for `lease_millis`.
+    #[must_use]
+    pub fn seeded(pacts: Vec<Pact>, lease_millis: u64) -> Self {
+        Self {
+            store: Store::seeded(pacts, lease_millis),
         }
-        Err(NotHeld)
+    }
+}
+
+#[cfg(feature = "async")]
+impl pacta_contract::AsyncRegistry for MemoryRegistryAsync {
+    type Error = NotHeld;
+
+    async fn claim(&self, dockets: &[&str], now: Timestamp) -> Result<Option<Claim>, NotHeld> {
+        Ok(self.store.claim(dockets, now))
+    }
+
+    fn lease_millis(&self) -> u64 {
+        self.store.lease_millis()
+    }
+
+    async fn apply(
+        &self,
+        _retainer: &Retainer,
+        transition: &Transition<'_>,
+    ) -> Result<(), NotHeld> {
+        // The store's `apply` is one atomic `Mutex` scope; awaiting nothing, this backend's futures
+        // are ready, but it exercises the same async surface a durable backend implements.
+        self.store.apply(transition)
     }
 }
 
@@ -166,5 +240,21 @@ mod tests {
             Err(NotHeld),
             "a concluded obligation has no claim to relinquish"
         );
+    }
+
+    /// The reference async backend is held to the same scenarios as every sync backend, through the
+    /// shared conformance suite — the async binding proving itself, over the same `Store`.
+    #[cfg(feature = "async")]
+    #[test]
+    fn passes_async_conformance() {
+        pacta_conformance::run_async(MemoryRegistryAsync::seeded);
+    }
+
+    /// The at-most-once invariant under concurrent contention, through the shared *portable* runner
+    /// — the exact check any async backend runs, driven by OS threads and `block_on` (no runtime).
+    #[cfg(feature = "async")]
+    #[test]
+    fn passes_async_contention() {
+        pacta_conformance::run_async_contention(MemoryRegistryAsync::seeded);
     }
 }

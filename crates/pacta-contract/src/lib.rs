@@ -376,6 +376,15 @@ pub type Transition<'a> = dyn Fn(&lifecycle::State) -> Result<lifecycle::State, 
     + Sync
     + 'a;
 
+/// The asynchronous binding of the [`Registry`] contract, available behind the `async` feature.
+/// [`AsyncRegistry`] is the same five-op contract over the same [`Transition`] port, made async;
+/// [`apply_via_cas`] is the optional compare-and-set helper. A consumer that does not enable `async`
+/// compiles none of it.
+#[cfg(feature = "async")]
+mod async_registry;
+#[cfg(feature = "async")]
+pub use async_registry::{AsyncRegistry, apply_via_cas};
+
 /// The Registry manages the lifecycle of Pacts. It is a pure state machine.
 ///
 /// Time is injected: [`claim`](Registry::claim) and
