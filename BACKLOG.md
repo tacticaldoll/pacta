@@ -186,13 +186,30 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
     (the reference async backend). Still pending: the shared async conformance runner
     (deferred until worklane's rebind forces it — decide scenario-data-refactor vs
     `maybe-async` then), and the `claim_select` throughput spike (worklane side).
-  - **Publish cadence — deferred, not decided.** `pacta-contract-async` and
-    `pacta-memory-async` keep the workspace-default `publish` flag; whether/when they
-    enter `release-packaging`'s published set is deferred to **worklane's review against
-    the current async path** (its rebind is what forces a crates.io dependency —
-    force-then-extract). No gate reads the flag and nothing publishes until 0.1.3 is
-    finalized, so this stays open without drift; flip the flags and update
-    `release-packaging` only when that review forces it.
+  - **Version-cadence isolation — delivered (not just claimed).** The async crates carry
+    their **own version line** (`pacta-contract-async` / `pacta-memory-async` at `0.1.0`),
+    off the workspace lockstep, so the async surface can evolve — even break at `0.x` —
+    without dragging `pacta-contract`. That protects the **published** `pacta-contract`
+    (`0.1.2`): downstream `^0.1` never breaks from a cosmetic lockstep bump. (Earlier the
+    decision *claimed* isolation while the impl was `version.workspace = true` lockstep — a
+    real internal inconsistency, now resolved by delivering per-crate versions rather than
+    softening the rationale.)
+  - **Publish cadence — deferred, delivered as `publish = false`.** Both async crates are
+    `publish = false` while the async surface evolves, so finalizing the sync release does
+    **not** publish an evolving async API into crates.io semver. They flip to `publish =
+    true` (and enter `release-packaging`'s set) only when **worklane's review against the
+    current async path** proves them stable enough — force-then-extract. `release-packaging`
+    is unchanged (published set = the original six); no drift.
+  - **Release shape (recorded, for finalization).** The sync side is **additive-only** (the
+    new `lifecycle` module; the frozen five-op surface, `Outcome`, and value types
+    untouched) → **`0.1.3`** (validates the branch), *not* a whole-workspace `0.2.0`. The
+    async crates ride the workspace unpublished at their own `0.1.0`. **Hard gates before
+    the async surface may publish / be called proven:** (1) the **async conformance runner**
+    over single-source scenario data (`pacta-memory-async` runs the same scenarios as the
+    sync suite — without it the sync/async parity is unproven, so async is *not* delivered);
+    (2) the `claim_select` **concurrency/throughput** de-risk, which is worklane-side
+    (a real durable backend under contention) and cannot be discharged from pacta — note it
+    honestly in the release notes as "durable concurrent throughput proven consumer-side."
 
 Surface: lifecycle persistence.
 

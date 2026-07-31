@@ -154,7 +154,7 @@ dependencies = [
 
 [[package]]
 name = "pacta-contract-async"
-version = "0.1.2"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "pacta-contract",
@@ -197,7 +197,7 @@ dependencies = [
 
 [[package]]
 name = "pacta-memory-async"
-version = "0.1.2"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "pacta-contract",
