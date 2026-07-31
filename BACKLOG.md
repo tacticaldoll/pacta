@@ -186,6 +186,25 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
     (the reference async backend). Still pending: the shared async conformance runner
     (deferred until worklane's rebind forces it — decide scenario-data-refactor vs
     `maybe-async` then), and the `claim_select` throughput spike (worklane side).
+  - **Fence-rule divergence: pacta contract vs worklane (a worklane-rebind finding, not a
+    pacta change).** pacta's lifecycle fences settlement on **reclaim**, not on expiry: a
+    holder whose lease has lapsed but whose pact **nobody has reclaimed yet** can still
+    `fulfill`/`breach`/`release` (its retainer is still the current holder). This is
+    deliberate, shipped, and proven — `pacta-conformance::late_fulfill_before_reclaim_succeeds`
+    ("a late fulfill of genuinely-done work settles") and the `lifecycle-persistence`
+    reclaim-rotation requirement ("settlement rejected **only after** the pact is reclaimed").
+    Heartbeat likewise treats `now == expiry` as still-alive (`expiry >= now`). The async
+    binding faithfully mirrors this (so async ↔ sync do not drift). **worklane's shipped model
+    fences on expiry instead** (`leased_until > now`: a lapsed ack → `StaleReservation` →
+    requeue), and its boundary is exclusive. So worklane **cannot** preserve its own behavior
+    by rebinding onto pacta's contract on this point — exactly the pacta finding worklane's
+    dogfood stop-condition anticipated. Reconciliation is **worklane's**, at rebind: either
+    adopt pacta's reclaim-fence (a deliberate change to worklane's behavior + its conformance),
+    or keep worklane's expiry-fence in its own port (not a full rebind here). **Not** a pacta
+    change: aligning pacta to worklane would be a *breaking* change to a published, spec'd,
+    conformance-tested semantic — and reclaim-fence is arguably the better design (it salvages
+    genuinely-done work rather than redundantly requeuing it). If reclaim-fence is ever
+    reconsidered, that is a separate claim-authority case, never smuggled into the async work.
   - **Version-cadence isolation — delivered (not just claimed).** The async crates carry
     their **own version line** (`pacta-contract-async` / `pacta-memory-async` at `0.1.0`),
     off the workspace lockstep, so the async surface can evolve — even break at `0.x` —
