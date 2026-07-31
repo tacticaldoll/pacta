@@ -61,6 +61,34 @@ When reading proposals or reviewing code, actively challenge the design:
 
 Reject or redesign changes that pull Pacta toward broad queue-runtime behavior.
 
+## Pattern Admission Guardrail
+
+Pacta leads with patterns — consumers ignite its work, they do not gate it — so a
+composition pattern earns its place by its own soundness, not by a consumer's demand.
+That license is bounded: admit a pattern into a core crate only when all four hold.
+
+1. **Native**: expressed in purely Pacta-native vocabulary.
+2. **Sibling-clear**: steps on no sibling product's domain.
+3. **Non-goal-clear**: pulls toward no stated non-goal.
+4. **Mechanism-only**: touches optional composition mechanism, not the durable contract.
+
+A pattern failing any question is rejected from core or relocated to an extension
+surface, a sibling, or the consumer. This is what keeps "lead with patterns" from
+becoming a feature catalog: concrete orchestration such as retry, timeout, or
+circuit posture fails questions 2 or 3 no matter how reasonable it looks.
+
+A judgment is prose; its enforceable content projects onto two executable shadows,
+and part of it cannot project at all:
+
+- **Governance** gives static/structural teeth (a Tianheng reaction over the code's
+  shape). Non-goal vocabulary can be forbidden here without naming a sibling.
+- **Conformance** gives dynamic/behavioral teeth (a suite that runs the code).
+- **Adversarial review** holds the irreducible residue. The sibling-clear question
+  cannot become a reaction — a reaction would have to name the siblings it checks
+  against, which sibling-blindness forbids — so it stays a review obligation by
+  design. State which prose has teeth and which does not, rather than pretending all
+  of it does.
+
 ## OpenSpec Workflow
 
 This repository uses OpenSpec. The lifecycle is:
