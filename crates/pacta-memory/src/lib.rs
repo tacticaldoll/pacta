@@ -33,7 +33,14 @@ impl std::error::Error for NotHeld {}
 
 enum State {
     Available,
-    Held { retainer: Uuid, expiry: Timestamp },
+    Held {
+        retainer: Uuid,
+        expiry: Timestamp,
+    },
+    /// Released, non-terminal: claimable again only at or after `rearm_at`.
+    Deferred {
+        rearm_at: Timestamp,
+    },
     Settled,
 }
 
@@ -96,6 +103,8 @@ impl Registry for MemoryRegistry {
                 State::Available => true,
                 // A lapse: an expired hold is reclaimable through this claim path.
                 State::Held { expiry, .. } => expiry < now,
+                // A re-arm: a released pact is claimable once its instant has passed.
+                State::Deferred { rearm_at } => rearm_at <= now,
                 State::Settled => false,
             }
         });
@@ -144,6 +153,21 @@ impl Registry for MemoryRegistry {
     fn breach(&self, retainer: &Retainer) -> Result<(), Self::Error> {
         self.settle(retainer)
     }
+
+    fn release(&self, retainer: &Retainer, rearm_at: Timestamp) -> Result<(), Self::Error> {
+        let mut records = self
+            .records
+            .lock()
+            .expect("registry mutex should not be poisoned");
+        // Only the current holder may release; a settled or non-held pact has no
+        // current holder, so this rejects settled-release and stale retainers alike —
+        // the same authority check as fulfill and breach.
+        let index = Self::find_holder(&mut records, retainer).ok_or(NotHeld)?;
+        // Non-terminal: drop the hold (rotating authority away from this retainer) and
+        // re-arm. The core honors the injected instant; it computes no delay.
+        records[index].state = State::Deferred { rearm_at };
+        Ok(())
+    }
 }
 
 impl MemoryRegistry {
@@ -167,5 +191,41 @@ mod tests {
     #[test]
     fn passes_registry_conformance() {
         pacta_conformance::run(MemoryRegistry::seeded);
+    }
+
+    fn a_pact() -> Pact {
+        Pact::new(Uuid::new_v4(), "d".to_string(), "k".to_string(), Vec::new())
+    }
+
+    #[test]
+    fn release_rejects_a_non_holder() {
+        let registry = MemoryRegistry::seeded(vec![a_pact()], 1000);
+        registry
+            .claim(&["d"], Timestamp::from_millis(0))
+            .expect("claim should not error")
+            .expect("a pact should be claimable");
+        let stranger = Retainer::new(Uuid::new_v4());
+        assert_eq!(
+            registry.release(&stranger, Timestamp::from_millis(0)),
+            Err(NotHeld),
+            "release by a non-holder must be rejected, like fulfill and breach"
+        );
+    }
+
+    #[test]
+    fn a_settled_pact_cannot_be_released() {
+        let registry = MemoryRegistry::seeded(vec![a_pact()], 1000);
+        let claim = registry
+            .claim(&["d"], Timestamp::from_millis(0))
+            .expect("claim should not error")
+            .expect("a pact should be claimable");
+        registry
+            .fulfill(&claim.retainer)
+            .expect("fulfill should settle");
+        assert_eq!(
+            registry.release(&claim.retainer, Timestamp::from_millis(0)),
+            Err(NotHeld),
+            "a concluded obligation has no claim to relinquish"
+        );
     }
 }
