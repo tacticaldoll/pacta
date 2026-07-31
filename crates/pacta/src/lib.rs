@@ -16,9 +16,11 @@
 //! two halves.
 //!
 //! **What a backend must do (the implementer half).** A [`Registry`] provides the
-//! `claim` → `heartbeat` → `fulfill` / `breach` lifecycle over a bounded lease: it
-//! leases a [`Claim`], reclaims a lapsed lease through the normal claim path with a
-//! rotated [`Retainer`], and rejects a heartbeat presented after expiry. This half
+//! `claim` → `heartbeat` → `fulfill` / `breach` lifecycle over a bounded lease, plus a
+//! non-terminal `release` that re-arms a pact to be claimable again only at or after a
+//! consumer-supplied instant: it leases a [`Claim`], reclaims a lapsed lease through the
+//! normal claim path with a rotated [`Retainer`], rejects a heartbeat presented after
+//! expiry, and honors a re-arm instant exactly as it honors injected time. This half
 //! is not merely described — it is *executably proven*: a backend runs the
 //! `pacta-conformance` suite (a dev-dependency) and passing it is what it means to
 //! satisfy the contract — the backend author's two-crate journey is implement
@@ -71,6 +73,7 @@
 //! #     fn heartbeat(&self, _r: &Retainer, _n: Timestamp) -> Result<(), Infallible> { Ok(()) }
 //! #     fn fulfill(&self, _r: &Retainer) -> Result<(), Infallible> { Ok(()) }
 //! #     fn breach(&self, _r: &Retainer) -> Result<(), Infallible> { Ok(()) }
+//! #     fn release(&self, _r: &Retainer, _t: Timestamp) -> Result<(), Infallible> { Ok(()) }
 //! # }
 //! # struct Performer;
 //! # impl Executor for Performer {
