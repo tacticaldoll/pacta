@@ -4,6 +4,67 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-07-19
+
+Hardens the 0.2 backend-author contract so implementation, conformance, and documentation
+agree. Patch-compatible: additive API and fixes only — no caller-facing lifecycle semantics
+change and no orchestration policy.
+
+### Added
+
+- **`pacta::lifecycle` and `pacta::Uuid` re-exports** — the colorless lifecycle kernel (`State`,
+  the `on_X` transition decisions, `is_claimable`, and the lease arithmetic) and the `Uuid`
+  identifier type the public constructors require are now reachable through the facade, so a legal
+  `Registry` backend — which mints Uuid-based fencing tokens — is implementable from `pacta` alone.
+  The advanced step-driver `kernel` stays facade-excluded.
+- **Conformance atomic-authority coverage**: `run_contention` (sync) and an extended
+  `run_async_contention` verify concurrent **claim** and **settlement** contention through the
+  public trait only; a barrier-synchronized broken fixture proves the harness is non-vacuous.
+  The `heartbeat(now == expiry)` boundary is now asserted in the shared scenario set.
+- **Runtime-compatible async conformance entry** `run_async_with(make, driver)` over a new
+  `BlockingDriver` trait (plus the built-in `SelfProgress` driver), so a real-reactor backend
+  runs the one shared scenario set on its own runtime — no scenario duplication, no `Send`
+  bound imposed, and no async runtime pulled into the crate. `run_async` and
+  `run_async_contention` remain as ready-future conveniences.
+- **Middleware enter/exit order proof** in `pacta-executor`: the first-added middleware is
+  outermost (enters first, exits last) with the executor innermost, asserted by a full trace
+  rather than the settled outcome alone.
+
+### Changed
+
+- The sync `Registry` rustdoc reaches parity with `AsyncRegistry`: atomic claim that rotates
+  the retainer and admits only an eligible pact, `apply` as `load → decide → store` in one
+  atomic scope, reclaim (not mere expiry) rotates authority, and how a backend error surfaces
+  not-current-holder — separating the behavioral proof from the full-scan-free query-shape
+  obligation.
+
+### Fixed
+
+- **The reference `apply` now locates the pact held by the retainer** instead of applying a
+  transition to the first record any transition accepts. `pacta-memory`'s shared `Store::apply`
+  (both `MemoryRegistry` and `MemoryRegistryAsync`) and the `MemAsync` contract-test backend
+  load the record the retainer holds — as a durable backend loads its row by holder — so a
+  stranger retainer paired with an any-state transition is rejected and mutates nothing.
+- **The `pacta` crate-root doctest is now a complete legal, stateful backend**: it holds real
+  `lifecycle::State`, mints a distinct retainer per claim, applies the transition atomically,
+  persists the next state, proves a settled pact is no longer claimable, and proves a lapsed pact's
+  reclaim rotates the retainer — replacing a no-op `apply` that held no state and a fixed nil
+  retainer that never rotated.
+
+### Documentation
+
+- `Transition`'s `Send + Sync` bound is documented as sharing the transition closure across
+  threads, not as making the async `apply` future `Send` (future coloring stays the consumer's).
+- `apply_via_cas` is documented as an unbounded retry with no fairness, timeout, or cancellation
+  guarantee; termination under pathological contention is caller/runtime policy.
+- `lifecycle::State::Settled` is documented as the model/reference representation (a durable
+  backend may represent settled by removing the row), and `lifecycle::State` as a closed
+  four-variant enum for the 0.2 series.
+- The `lifecycle-persistence`, `registry-conformance`, `public-facade`, `contract-manifestation`,
+  `async-registry-binding`, and `middleware-stack` specs, all six crate READMEs, and
+  `docs/domain-language.md` (`Registry` as the lifecycle-authority port; the removed `Policy`
+  value is no longer listed as a live term) were brought current with the 0.2 surface.
+
 ## [0.2.1] - 2026-07-17
 
 Reifies `Middleware` composition so it is manifest on the consumer side. Additive — the
@@ -155,6 +216,7 @@ First public release: the thin lifecycle foundation, not a complete durable runt
 - No ingress API (`Signal -> Pact` is user-provided, not a shipped surface).
 - No framework adapters (Tower, HTTP) and no retry/backoff/timeout orchestration.
 
+[0.2.2]: https://github.com/tacticaldoll/pacta/releases/tag/v0.2.2
 [0.2.1]: https://github.com/tacticaldoll/pacta/releases/tag/v0.2.1
 [0.2.0]: https://github.com/tacticaldoll/pacta/releases/tag/v0.2.0
 [0.1.2]: https://github.com/tacticaldoll/pacta/releases/tag/v0.1.2
