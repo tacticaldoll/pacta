@@ -78,6 +78,10 @@ implementation, so no obligation is a contract without a client.
 - **WHEN** concrete orchestration *policy* (retry, timeout, rate-limit) is introduced later
 - **THEN** it arrives as `Middleware` implementations composed onto the existing seam — sibling- or consumer-owned, together with any policy trait it needs, co-designed so each has a real client — rather than as core features, and the core assembler grows no named method for it
 
+#### Scenario: A trait's in-workspace validator may be test-only scaffolding
+- **WHEN** a user-obligation trait ships with an in-workspace consumer and a reference or exercising implementation that validates its shape
+- **THEN** that reference or exercising implementation MAY be `#[cfg(test)]`-only scaffolding never exposed as public API, distinct from a publicly shippable, production-usable orchestration `Middleware` — which stays sibling- or consumer-owned regardless of where the trait it implements is defined
+
 ### Requirement: Pattern Admission Guardrail
 Pacta SHALL admit a composition pattern into a core crate only when it passes a stated
 four-question guardrail, so that Pacta's pattern-leading stance ("Consumers ignite pacta's work;
