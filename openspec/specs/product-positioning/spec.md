@@ -2,11 +2,9 @@
 
 ## Purpose
 
-Define Pacta's product category, elegance, lightness, benchmark stance, and
-explicit non-positioning.
-
+Define Pacta's product category, elegance, lightness, benchmark stance,
+composition-pattern documentation, and explicit non-positioning.
 ## Requirements
-
 ### Requirement: Product Category
 Pacta SHALL position itself as a thin, elegant durable contract fabric and governed pattern framework for Rust user-defined obligations.
 
@@ -50,6 +48,7 @@ Pacta SHALL explicitly reject product positions that would force heavy broker, q
 #### Scenario: Core is not Tower-first
 - **WHEN** active product prose describes integration with Tower or middleware ecosystems
 - **THEN** it keeps those integrations outside the product's core positioning
+
 ### Requirement: The Composition Pattern Is Documented
 Pacta SHALL document, where consumers look, its mechanism-versus-policy composition
 pattern: the core — including the reference `Driver`, a mechanical loop that decides
@@ -65,3 +64,4 @@ rather than as shipped retry, timeout, or backoff — and SHALL name no sibling 
 #### Scenario: The documented pattern claims only shipped behavior
 - **WHEN** the composition pattern is documented
 - **THEN** it presents `Middleware` as the seam where policy such as retry, timeout, or fail-fast composes, without presenting those as behavior Pacta ships
+
