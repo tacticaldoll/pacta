@@ -20,4 +20,5 @@ async-trait.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true
+pacta-conformance = { workspace = true, features = ["async"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
