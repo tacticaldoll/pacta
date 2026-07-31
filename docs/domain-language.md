@@ -27,7 +27,11 @@ the concept is part of Pacta's public model.
 
 - `Registry` - the pure lifecycle state machine that preserves pacts and dockets.
 - `Executor` - the public role that executes claimed pacts through middleware.
-- `Driver` - an internal runtime-loop term for polling a registry and driving
+- `Execution` - a single attempt to handle a claimed pact.
+- `Outcome` - the executor's result for an execution.
+- `Settlement` - the lifecycle conclusion applied to a claim, currently fulfill
+  or breach.
+- `Driver` - a mechanical runtime-loop term for polling a registry and driving
   execution. Use it when discussing implementation mechanics, not as the main
   public role.
 
@@ -37,6 +41,9 @@ Public APIs, OpenSpec requirements, examples, and user-facing documentation use
 the Pacta domain language. Private implementation may use mechanical terms such
 as driver, heartbeat, retry, timeout, scheduler, or middleware when those terms
 make behavior clearer.
+
+Tower is an adapter target, not Pacta's core public identity. Tower vocabulary
+belongs in adapter crates or features, not in the first-layer runtime API.
 
 ## Legacy Mapping
 
