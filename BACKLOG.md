@@ -139,9 +139,13 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
     - **Ordering/priority is edge policy** (the consumer's, single-sourced in the
       consumer), never a pacta spec parameter — so eligibility-as-data cannot grow
       into a query DSL. Eligibility stays a fixed invariant baked into the contract.
-  - **Crate topology** (forced by feature-unification leak + version-cadence
-    isolation — a shared `async` feature would leak the async proc-macro/`syn` into
-    sync-only consumers of `pacta-contract`, destroying its thin syn-free footprint):
+  - **Crate topology** (forced by version-cadence isolation + not forcing the async
+    dep on sync-only consumers — a shared `async` feature would, via cargo feature
+    unification, compile `async-trait` and the async-runtime coupling into sync-only
+    consumers sharing the build graph; a separate, explicitly-depended crate avoids
+    that. NB: pacta-contract is **not** syn-free today — it already pulls `syn` via
+    `serde_derive` — so the earlier "syn-free footprint" wording was wrong; the reasons
+    above are the real ones):
     new **`pacta-contract-async`** (async ports, deps `pacta-contract`), new
     **`pacta-memory-async`** (async reference backend), and `pacta-conformance`
     gains an **async runner** over the single-source scenario data. `#[async_trait]`

@@ -4,6 +4,7 @@ members = [
     "crates/pacta",
     "crates/pacta-conformance",
     "crates/pacta-contract",
+    "crates/pacta-contract-async",
     "crates/pacta-driver",
     "crates/pacta-executor",
     "crates/pacta-governance",
@@ -23,9 +24,12 @@ publish = true
 [workspace.dependencies]
 pacta-conformance = { path = "crates/pacta-conformance", version = "0.1.2" }
 pacta-contract = { path = "crates/pacta-contract", version = "0.1.2" }
+pacta-contract-async = { path = "crates/pacta-contract-async", version = "0.1.2" }
 pacta-driver = { path = "crates/pacta-driver", version = "0.1.2" }
 pacta-executor = { path = "crates/pacta-executor", version = "0.1.2" }
 serde = { version = "1.0", features = ["derive"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt", "macros"] }
 tianheng = "0.1.9"
 guibiao = "0.1.9"
