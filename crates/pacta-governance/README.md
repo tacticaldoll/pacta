@@ -18,13 +18,29 @@ drifting:
   is the re-exported backend-author surface) and its re-exports-only shape;
 - the executor's orchestration-vocabulary reaction (no public `retry`/`timeout`/`backoff`/
   `circuit`/`quota`/`rate-limit` symbol);
-- active-prose drift.
+- active-prose drift;
+- a freshness-gated projection of the accepted constitution in
+  `AGENTS.pacta-law.md`.
 
 Run it from the workspace root:
 
 ```sh
 cargo run -p pacta-governance -- check --manifest-path Cargo.toml
 ```
+
+The Rust `Constitution` in `src/main.rs` is the executable authority.
+`AGENTS.pacta-law.md` is generated orientation for contributors and agents, while
+OpenSpec specs remain the durable requirements. Regenerate the projection only
+after a deliberate, separately authorized law change:
+
+```sh
+BLESS=1 cargo test -p pacta-governance accepted_law_projection_is_fresh
+```
+
+Without `BLESS`, the same test fails if the projection is missing, unreadable, or
+stale. Tianheng's `GovernanceTest` also proves the current workspace is clean and
+that every workspace crate remains covered; focused negative fixtures continue to
+assert the exact reaction that bites.
 
 Part of [Pacta](https://github.com/tacticaldoll/pacta).
 
