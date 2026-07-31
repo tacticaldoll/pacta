@@ -71,6 +71,10 @@ Pacta SHALL maintain a changelog documenting released versions honestly.
 - **WHEN** `CHANGELOG.md` is read
 - **THEN** it contains a `0.1.0` entry describing what the release ships
 
+#### Scenario: Every version heading resolves through a footer link
+- **WHEN** `pacta-governance`'s `check` command runs
+- **THEN** it fails if any `## [X.Y.Z]` version heading in `CHANGELOG.md` has no matching `[X.Y.Z]: <url>` reference-style footer link, so a release entry cannot silently ship without resolving to its GitHub release page
+
 ### Requirement: Honest Release Scope
 The README SHALL state what the release actually ships and what is deferred, so a
 first-time crates.io consumer is not misled about durability, ingress, or adapters
