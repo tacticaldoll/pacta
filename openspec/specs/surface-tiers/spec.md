@@ -51,3 +51,4 @@ promise from prose into an enforced contract.
 #### Scenario: A new protocol variant is not breaking
 - **WHEN** a later release adds a variant to `Directive`, `Notice`, or `StepResult`
 - **THEN** downstream crates that matched with a wildcard arm continue to compile, because the enums were declared non-exhaustive at 0.1.0
+

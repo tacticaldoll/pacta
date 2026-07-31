@@ -159,3 +159,4 @@ execution context — SHALL be `#[non_exhaustive]` while retaining its construct
 #### Scenario: Execution is an extensible input seam
 - **WHEN** `Execution` gains execution-context fields in a later release
 - **THEN** downstream executors that read `Execution` continue to compile, because it is `#[non_exhaustive]` and constructed through `Execution::new`
+

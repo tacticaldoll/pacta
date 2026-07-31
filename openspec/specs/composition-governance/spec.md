@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define Pacta's core composition boundary: Pacta-native middleware and policy
+Define Pacta's core composition boundary: Pacta-native middleware and pattern
 vocabulary in core crates, adapter-owned framework integrations outside core,
 and executable dependency closure for core runtime crates.
 
@@ -48,6 +48,7 @@ Pacta SHALL keep core crate normal dependencies closed by executable governance.
 #### Scenario: Framework dependencies are rejected from core
 - **WHEN** a core crate adds a normal dependency on Tower, HTTP adapter, backend, or other integration framework crates without an explicit governance amendment
 - **THEN** the Tianheng governance reaction fails
+
 ### Requirement: User-Obligation Delivery Pattern
 Pacta SHALL deliver its user obligations through a stated, executably-proven pattern,
 so a consumer knows how to fulfill an obligation and the pattern cannot silently

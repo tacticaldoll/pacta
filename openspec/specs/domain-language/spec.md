@@ -96,6 +96,7 @@ Pacta SHALL define canonical public terms for its runtime skeleton before exposi
 #### Scenario: Naming middleware orchestration
 - **WHEN** public APIs, specs, or user-facing documentation refer to retry, timeout, rate limit, or similar execution orchestration
 - **THEN** they use clear Pacta-native engineering terms such as `Middleware`
+
 ### Requirement: Vocabulary As Governance
 Pacta SHALL treat its domain vocabulary as a governance boundary that protects the product architecture.
 

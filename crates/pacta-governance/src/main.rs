@@ -261,6 +261,15 @@ fn check_active_prose(root: &Path) -> Result<(), Vec<ProseViolation>> {
     for relative in ACTIVE_PROSE_FILES {
         let path = root.join(relative);
         let Ok(content) = fs::read_to_string(&path) else {
+            // A canonical governed file that cannot be read must fail the gate, not
+            // be silently skipped — otherwise a governed doc that vanishes grants a
+            // free pass. Fail loudly, naming the file.
+            violations.push(ProseViolation {
+                path: String::from(*relative),
+                line: 0,
+                phrase: "<unreadable>",
+                reason: "a governed active-prose file must be present and readable",
+            });
             continue;
         };
 
@@ -311,16 +320,36 @@ struct SourceViolation {
 
 fn check_facade_reexports_only(root: &Path) -> Result<(), Vec<SourceViolation>> {
     let mut violations = Vec::new();
+    let files = collect_rs_files(&root.join(FACADE_SOURCE_DIR));
 
-    for file in collect_rs_files(&root.join(FACADE_SOURCE_DIR)) {
-        let Ok(content) = fs::read_to_string(&file) else {
-            continue;
-        };
+    // No facade source found at all (missing or empty source tree) is a vacuous
+    // pass — mirror the coverage check's non-vacuous guard and fail. Keyed on files
+    // *found*, not files *read*, so a present-but-unreadable file reports as
+    // unreadable below rather than as an empty tree.
+    if files.is_empty() {
+        violations.push(SourceViolation {
+            path: FACADE_SOURCE_DIR.to_owned(),
+            line: 0,
+            marker: "no facade source files found",
+        });
+    }
+
+    for file in files {
         let relative = file
             .strip_prefix(root)
             .unwrap_or(&file)
             .to_string_lossy()
             .into_owned();
+        let Ok(content) = fs::read_to_string(&file) else {
+            // An unreadable facade source file must fail the gate, not be skipped —
+            // a file the scan cannot read cannot be certified re-exports-only.
+            violations.push(SourceViolation {
+                path: relative,
+                line: 0,
+                marker: "unreadable facade source",
+            });
+            continue;
+        };
         violations.extend(check_facade_content(&relative, &content));
     }
 
@@ -478,6 +507,70 @@ pacta-driver = { path = "../pacta-driver" }
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
 
         assert_eq!(check_facade_reexports_only(&root), Ok(()));
+    }
+
+    #[test]
+    fn missing_active_prose_file_fails_loudly() {
+        // A root with none of the canonical governed prose files must fail the gate,
+        // not pass vacuously by skipping every unreadable file.
+        let workspace = TempWorkspace::new("pacta-governance-missing-prose");
+
+        let Err(violations) = check_active_prose(&workspace.path) else {
+            panic!("a root missing every governed prose file must fail the gate");
+        };
+        assert!(
+            violations
+                .iter()
+                .any(|violation| violation.phrase == "<unreadable>"),
+            "expected an unreadable-file violation naming a governed file: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn empty_facade_source_tree_fails_loudly() {
+        // A root with no facade source tree scans zero files; the non-vacuous guard
+        // must convert that into a failure rather than an empty (clean) pass.
+        let workspace = TempWorkspace::new("pacta-governance-empty-facade");
+
+        let Err(violations) = check_facade_reexports_only(&workspace.path) else {
+            panic!("a root with no facade source must fail the gate");
+        };
+        assert!(
+            violations
+                .iter()
+                .any(|violation| violation.marker == "no facade source files found"),
+            "expected a no-facade-source violation: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn unreadable_facade_source_file_fails_loudly() {
+        // A present-but-unreadable facade source file must fail the gate, not be
+        // skipped. Invalid UTF-8 makes `read_to_string` fail portably (no reliance
+        // on filesystem permissions, which root would bypass), while the file is
+        // still found by the scan — so this exercises the unreadable path, distinct
+        // from the empty-tree path.
+        let workspace = TempWorkspace::new("pacta-governance-unreadable-facade");
+        let src = workspace.path.join(FACADE_SOURCE_DIR);
+        fs::create_dir_all(&src).expect("facade source dir should be creatable");
+        fs::write(src.join("lib.rs"), [0xFF, 0xFE, 0x00])
+            .expect("invalid-utf8 facade source should be writable");
+
+        let Err(violations) = check_facade_reexports_only(&workspace.path) else {
+            panic!("a present-but-unreadable facade source file must fail the gate");
+        };
+        assert!(
+            violations
+                .iter()
+                .any(|violation| violation.marker == "unreadable facade source"),
+            "expected an unreadable-facade-source violation: {violations:?}"
+        );
+        assert!(
+            !violations
+                .iter()
+                .any(|violation| violation.marker == "no facade source files found"),
+            "a found-but-unreadable file must not report as an empty tree: {violations:?}"
+        );
     }
 
     #[test]
