@@ -86,7 +86,12 @@ extension surface are justified.
   the user implements and a concrete orchestration middleware consumes. It was
   removed from 0.1.0 as an inert value type (no consumer, no reference impl) and
   must return only co-designed with its first consuming middleware, so its method
-  set is validated by a real client rather than frozen ahead of one.
+  set is validated by a real client rather than frozen ahead of one. This
+  "co-designed with a real client" requirement is satisfied by an in-workspace
+  `#[cfg(test)]`-only reference implementation and a test that exercises it (see
+  `composition-governance` spec), not by waiting for an external production
+  adopter. The concrete orchestration `Middleware` that consumes `Policy` in real
+  use stays sibling- or consumer-owned and does not ship from this workspace.
 - Further composition ergonomics around `Executor` beyond the shipped `Identity`/`Stack`/
   `Composition` mechanism (the blind assembler itself is now shipped — see Current Baseline).
 
