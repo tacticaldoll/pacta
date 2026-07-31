@@ -21,8 +21,8 @@ const LIFECYCLE_IMPL_TRAIT_REASON: &str = "the colorless lifecycle-state kernel 
 const KERNEL_NO_SERDE_REASON: &str = "the sans-I/O kernel is transient driving protocol, not durable state: it must not acquire Serialize/Deserialize, so persisting an in-flight directive or notice can never leak into the contract. Durable records (Pact, Claim, Retainer, Timestamp) carry serde; the kernel must not.";
 const CORE_NO_IO_REASON: &str = "the sans-I/O core contract performs no I/O: no code in pacta-contract (the kernel included) may call into std::io/fs/net/process; I/O lives in runtimes and backends outside the core. Coverage is partial by nature (I/O entry points cannot be enumerated, and macro-expanded I/O such as println! is invisible to a source scan), so this tooth complements review rather than replacing it.";
 const MEMORY_REASON: &str = "pacta-memory is a registry backend outside the core. It may depend only on pacta-contract and uuid, never on drivers, executors, or other backends.";
-const CONTRACT_ASYNC_REASON: &str = "pacta-contract-async is the async binding of the frozen Registry contract. It may depend only on pacta-contract (the value types and the shared lifecycle kernel) and async-trait, never on a runtime, a backend, or another workspace crate — so the async surface stays isolated and sync-only consumers never pull it.";
-const MEMORY_ASYNC_REASON: &str = "pacta-memory-async is the reference async registry backend. It may depend only on pacta-contract, pacta-contract-async, async-trait, and uuid, never on drivers, executors, or other backends.";
+const CONTRACT_ASYNC_REASON: &str = "pacta-contract-async is the async binding of the frozen Registry contract. It may depend only on pacta-contract (the value types and the shared lifecycle kernel), never on a runtime, a backend, or another workspace crate — so the async surface stays isolated and sync-only consumers never pull it. It uses native async fn in traits (AFIT), so it needs no async-trait dependency and forces no Send/runtime coloring.";
+const MEMORY_ASYNC_REASON: &str = "pacta-memory-async is the reference async registry backend. It may depend only on pacta-contract, pacta-contract-async, and uuid, never on drivers, executors, or other backends.";
 const CONFORMANCE_REASON: &str = "pacta-conformance is a backend-agnostic test suite. It may depend only on the contract bindings it verifies — pacta-contract and, optionally, pacta-contract-async (the async binding) — plus uuid, never on a specific backend.";
 const PROSE_REASON: &str =
     "active prose must not reintroduce stale architecture-defining vocabulary";
@@ -135,17 +135,12 @@ fn constitution() -> Constitution {
         )
         .boundary(
             CrateBoundary::crate_("pacta-contract-async")
-                .restrict_dependencies_to(["pacta-contract", "async-trait"])
+                .restrict_dependencies_to(["pacta-contract"])
                 .because(CONTRACT_ASYNC_REASON),
         )
         .boundary(
             CrateBoundary::crate_("pacta-memory-async")
-                .restrict_dependencies_to([
-                    "pacta-contract",
-                    "pacta-contract-async",
-                    "async-trait",
-                    "uuid",
-                ])
+                .restrict_dependencies_to(["pacta-contract", "pacta-contract-async", "uuid"])
                 .because(MEMORY_ASYNC_REASON),
         )
         .boundary(
