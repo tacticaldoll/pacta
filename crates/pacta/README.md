@@ -5,7 +5,8 @@ The curated entrypoint to Pacta: a thin, durable lifecycle contract you compose.
 `pacta` is a pure re-export facade — it carries no logic of its own. It re-exports
 the compose-level surface you need to run the lifecycle end to end: the contract
 types and `Registry`, the `Executor` / `Execution` / `Middleware` execution seam with the
-`Identity` / `Stack` / `Composition` composition mechanism, and the `Driver` runtime loop.
+`Identity` / `Stack` / `Composition` composition mechanism, the `Policy` trait and its
+`Verdict` decision for infrastructure-failure disposition, and the `Driver` runtime loop.
 This is the recommended crate to depend on.
 
 It also re-exports the **backend-author surface** — the `Transition` port, the colorless
