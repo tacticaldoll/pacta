@@ -21,4 +21,3 @@ uuid.workspace = true
 
 [dev-dependencies]
 pacta-conformance = { workspace = true, features = ["async"] }
-tokio = { workspace = true, features = ["rt-multi-thread"] }
