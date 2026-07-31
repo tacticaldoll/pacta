@@ -141,6 +141,7 @@ name = "pacta-conformance"
 version = "0.1.2"
 dependencies = [
  "pacta-contract",
+ "pacta-contract-async",
  "uuid",
 ]
 
@@ -200,6 +201,7 @@ name = "pacta-memory-async"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "pacta-conformance",
  "pacta-contract",
  "pacta-contract-async",
  "tokio",

@@ -129,6 +129,8 @@ impl AsyncRegistry for MemoryRegistryAsync {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
 
     const LEASE: u64 = 1000;
@@ -141,104 +143,52 @@ mod tests {
         Pact::new(Uuid::new_v4(), "d".to_string(), "k".to_string(), Vec::new())
     }
 
-    fn seeded() -> MemoryRegistryAsync {
-        MemoryRegistryAsync::seeded(vec![a_pact()], LEASE)
+    /// The reference async backend is held to the same scenarios as every sync backend, through the
+    /// shared conformance suite — the async binding proving itself, not a bespoke test set. This
+    /// runs synchronously because the runner drives the ready futures to completion; it proves
+    /// state-machine parity, not concurrency (see below).
+    #[test]
+    fn passes_async_conformance() {
+        pacta_conformance::run_async(|pacts, lease_millis| {
+            MemoryRegistryAsync::seeded(pacts, lease_millis)
+        });
     }
 
-    #[tokio::test]
-    async fn claim_sets_a_fresh_lease() {
-        let reg = seeded();
-        let claim = reg
-            .claim(&["d"], at(100))
-            .await
-            .unwrap()
-            .expect("claimable");
-        assert_eq!(claim.lease_expiry, at(100 + LEASE));
-    }
+    /// The one property the parity runner cannot reach: the async binding decomposes each
+    /// transition into `load` then `cas`, a race the sync fat-verb shape does not have. Under real
+    /// multi-threaded contention the set-if-unchanged fence must apply the settlement at most once.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_settle_applies_at_most_once() {
+        // Enough iterations that an interleaving loading the same state in both tasks is hit, and
+        // that a broken (non-atomic) fence would overwhelmingly double-apply on some iteration.
+        for _ in 0..2000 {
+            let reg = Arc::new(MemoryRegistryAsync::seeded(vec![a_pact()], LEASE));
+            let retainer = reg
+                .claim(&["d"], at(0))
+                .await
+                .unwrap()
+                .expect("claimable")
+                .retainer;
 
-    #[tokio::test]
-    async fn held_pact_not_reclaimable_before_expiry() {
-        let reg = seeded();
-        reg.claim(&["d"], at(0)).await.unwrap().expect("claimable");
-        assert!(reg.claim(&["d"], at(500)).await.unwrap().is_none());
-    }
+            let a = {
+                let reg = Arc::clone(&reg);
+                let retainer = retainer.clone();
+                tokio::spawn(async move { reg.fulfill(&retainer).await })
+            };
+            let b = {
+                let reg = Arc::clone(&reg);
+                let retainer = retainer.clone();
+                tokio::spawn(async move { reg.fulfill(&retainer).await })
+            };
+            let (a, b) = (a.await.unwrap(), b.await.unwrap());
 
-    #[tokio::test]
-    async fn expired_lease_lapses_and_rotates_retainer() {
-        let reg = seeded();
-        let first = reg.claim(&["d"], at(0)).await.unwrap().unwrap();
-        let second = reg
-            .claim(&["d"], at(1500))
-            .await
-            .unwrap()
-            .expect("reclaimable after lapse");
-        assert_ne!(first.retainer.id(), second.retainer.id());
-        assert_eq!(second.lease_expiry, at(1500 + LEASE));
-    }
-
-    #[tokio::test]
-    async fn fulfill_settles_terminally() {
-        let reg = seeded();
-        let claim = reg.claim(&["d"], at(0)).await.unwrap().unwrap();
-        reg.fulfill(&claim.retainer).await.expect("fulfill settles");
-        assert!(reg.claim(&["d"], at(0)).await.unwrap().is_none());
-    }
-
-    #[tokio::test]
-    async fn breach_settles_terminally() {
-        let reg = seeded();
-        let claim = reg.claim(&["d"], at(0)).await.unwrap().unwrap();
-        reg.breach(&claim.retainer).await.expect("breach settles");
-        assert!(reg.claim(&["d"], at(0)).await.unwrap().is_none());
-    }
-
-    #[tokio::test]
-    async fn released_pact_withheld_then_reclaimable_at_instant() {
-        let reg = seeded();
-        let first = reg.claim(&["d"], at(0)).await.unwrap().unwrap();
-        reg.release(&first.retainer, at(1000))
-            .await
-            .expect("release");
-        // Before the instant: withheld.
-        assert!(reg.claim(&["d"], at(999)).await.unwrap().is_none());
-        // At the instant: reclaimable, and authority rotated.
-        let second = reg
-            .claim(&["d"], at(1000))
-            .await
-            .unwrap()
-            .expect("reclaimable");
-        assert_ne!(first.retainer.id(), second.retainer.id());
-        assert_eq!(reg.fulfill(&first.retainer).await, Err(NotHeld));
-    }
-
-    #[tokio::test]
-    async fn heartbeat_extends_lease_preventing_lapse() {
-        let reg = seeded();
-        let claim = reg.claim(&["d"], at(0)).await.unwrap().unwrap();
-        // Heartbeat before expiry pushes the lease out.
-        reg.heartbeat(&claim.retainer, at(900))
-            .await
-            .expect("live lease refreshes");
-        // At 1500 the original lease would have lapsed; the refreshed one (to 1900) has not.
-        assert!(reg.claim(&["d"], at(1500)).await.unwrap().is_none());
-    }
-
-    #[tokio::test]
-    async fn heartbeat_on_lapsed_lease_is_rejected() {
-        let reg = seeded();
-        let claim = reg.claim(&["d"], at(0)).await.unwrap().unwrap();
-        assert_eq!(reg.heartbeat(&claim.retainer, at(1500)).await, Err(NotHeld));
-    }
-
-    #[tokio::test]
-    async fn stale_retainer_after_reclaim_is_rejected() {
-        let reg = seeded();
-        let first = reg.claim(&["d"], at(0)).await.unwrap().unwrap();
-        let _second = reg
-            .claim(&["d"], at(1500))
-            .await
-            .unwrap()
-            .expect("reclaimed");
-        assert_eq!(reg.fulfill(&first.retainer).await, Err(NotHeld));
+            let winners = [a.is_ok(), b.is_ok()].into_iter().filter(|&ok| ok).count();
+            assert_eq!(
+                winners, 1,
+                "settlement must apply exactly once: a={a:?} b={b:?}"
+            );
+            // The winner settled the pact; a stranger's authority is gone and it is not claimable.
+            assert!(reg.claim(&["d"], at(0)).await.unwrap().is_none());
+        }
     }
 }
