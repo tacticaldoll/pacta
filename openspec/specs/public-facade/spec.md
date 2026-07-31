@@ -13,9 +13,11 @@ empty-stack value, the reified stack value, and the blind assembler, and run the
 Because a legal `Registry` backend is written against the transition port, the facade
 SHALL also re-export the backend-author lifecycle surface — the colorless
 `pacta_contract::lifecycle` module (its `State`, the `on_X` transition decisions, the
-`is_claimable` predicate, the lease arithmetic) and the `Transition` port type — so a
-legal backend is implementable from `pacta` alone. The facade SHALL depend only on
-those three crates and SHALL NOT depend on any backend crate.
+`is_claimable` predicate, the lease arithmetic), the `Transition` port type, and the
+`Uuid` identifier type the public constructors require (`Pact::new`, `Retainer::new`) —
+so a legal backend, which mints Uuid-based fencing tokens, is implementable from `pacta`
+alone. The facade SHALL depend only on those three crates and SHALL NOT depend on any
+backend crate.
 
 #### Scenario: Facade re-exports the compose-level surface
 - **WHEN** a downstream consumer depends only on `pacta`
@@ -23,7 +25,7 @@ those three crates and SHALL NOT depend on any backend crate.
 
 #### Scenario: Facade re-exports the backend-author lifecycle path
 - **WHEN** a downstream consumer implements a `Registry` backend using only `pacta`
-- **THEN** it can name the `Transition` port and the `pacta_contract::lifecycle` surface (`State`, the `on_X` transition decisions, `is_claimable`, and the lease arithmetic) through `pacta`, so it can store lifecycle state, select an eligible pact, and apply a transition without depending on `pacta-contract` directly
+- **THEN** it can name the `Transition` port, the `pacta_contract::lifecycle` surface (`State`, the `on_X` transition decisions, `is_claimable`, and the lease arithmetic), and `Uuid` through `pacta`, so it can store lifecycle state, select an eligible pact, mint a fresh retainer, and apply a transition without depending on `pacta-contract` directly
 
 #### Scenario: Facade depends on no backend
 - **WHEN** `cargo run -p pacta-governance -- check --manifest-path Cargo.toml` runs
@@ -72,13 +74,15 @@ execution through a `Middleware` decorator, and `Registry` settlement — using 
 the facade's public API. This composition proof SHALL be a doctest rather than a
 separate `examples/` build target, so it runs and asserts under `cargo test` and is
 rendered on the published documentation. Its middleware SHALL be a pass-through
-decorator carrying no orchestration behavior, and its registry SHALL be a **legal**
-`Registry`: it SHALL hold real lifecycle state, implement the `claim` selection, the
-`lease_millis` accessor, and the atomic `apply` transition port (with heartbeat,
+decorator carrying no orchestration behavior, and its registry SHALL be a **complete
+legal** `Registry`: it SHALL hold real lifecycle state, implement the `claim` selection,
+the `lease_millis` accessor, and the atomic `apply` transition port (with heartbeat,
 fulfill, breach, and release inherited as defaults), execute the passed transition
-within a single atomic scope, and persist the resulting state. The doctest SHALL prove
-the lifecycle end to end: after the pact is claimed, executed, and settled, it is no
-longer claimable.
+within a single atomic scope, and persist the resulting state. `claim` SHALL mint a
+**distinct** retainer per claim (not a fixed value), so authority rotates on reclaim as
+the contract requires. The doctest SHALL prove the lifecycle end to end on two axes:
+after a pact is claimed, executed, and settled it is no longer claimable; and a pact
+whose lease lapses and is reclaimed yields a different retainer than the lapsed claim.
 
 #### Scenario: Facade composition doctest drives a fulfilled lifecycle
 - **WHEN** the facade doctest runs with a registry holding one claimable pact and an executor that reports `Outcome::Fulfilled`
@@ -86,7 +90,7 @@ longer claimable.
 
 #### Scenario: Facade composition doctest imports only from the facade
 - **WHEN** the facade doctest is compiled
-- **THEN** it references only items re-exported by `pacta` (including the `lifecycle` and `Transition` backend-author surface), and does not import from `pacta-contract`, `pacta-executor`, or `pacta-driver` directly
+- **THEN** it references only items re-exported by `pacta` (including the `lifecycle`, `Transition`, and `Uuid` backend-author surface), and does not import from `pacta-contract`, `pacta-executor`, `pacta-driver`, or `uuid` directly
 
 #### Scenario: Facade composition middleware carries no orchestration
 - **WHEN** the facade doctest's middleware wraps an executor and the driver executes a claimed pact
@@ -99,4 +103,8 @@ longer claimable.
 #### Scenario: The doctest proves a settled pact is not claimable
 - **WHEN** the facade doctest claims, executes, and settles the pact and then claims again
 - **THEN** the second claim returns nothing, proving the transition was actually applied and persisted rather than dropped
+
+#### Scenario: The doctest proves authority rotates on reclaim
+- **WHEN** the facade doctest claims a pact, lets its lease lapse, and reclaims it at a later injected time
+- **THEN** the reclaimed claim carries a different retainer than the lapsed one, proving the backend mints a fresh retainer and is a complete legal `Registry`, not a settlement-only proof
 
