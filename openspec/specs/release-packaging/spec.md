@@ -51,6 +51,7 @@ workspace as a whole.
 #### Scenario: Discoverability metadata is present
 - **WHEN** a publishable crate's manifest is read
 - **THEN** it resolves `keywords` and `categories` for crates.io discovery
+
 ### Requirement: Declared And Verified MSRV
 Pacta SHALL declare a minimum supported Rust version and verify it, so the declared
 floor is enforced rather than aspirational.
