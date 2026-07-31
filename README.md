@@ -29,6 +29,7 @@ Pacta's public API uses contract and arbitration terms:
 - `Clause` - business data carried by a pact.
 - `Claim` and `Retainer` - short-term processing authority.
 - `Fulfill` and `Breach` - lifecycle settlement outcomes.
+- `Middleware` and `Policy` - native execution composition and orchestration intent.
 - `Tribunal` - terminal review for exhausted pacts.
 
 See `docs/domain-language.md` for the full glossary and legacy mapping.
