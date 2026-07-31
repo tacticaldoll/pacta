@@ -24,12 +24,12 @@ fn at(millis: u64) -> Timestamp {
 }
 
 fn a_pact_on(docket: &str) -> Pact {
-    Pact {
-        id: Uuid::new_v4(),
-        docket: docket.to_string(),
-        kind: "conformance".to_string(),
-        clause: Vec::new(),
-    }
+    Pact::new(
+        Uuid::new_v4(),
+        docket.to_string(),
+        "conformance".to_string(),
+        Vec::new(),
+    )
 }
 
 fn a_pact() -> Pact {

@@ -15,6 +15,8 @@ const EXECUTOR_REASON: &str = "pacta-executor owns the Pacta-native execution vo
 const DRIVER_REASON: &str = "pacta-driver is mechanical runtime glue. It may depend only on pacta-contract and pacta-executor, never on adapters, backends, or external frameworks.";
 const GOVERNANCE_REASON: &str = "the governance gate must stay independent of the workspace graph it judges: it may depend only on governance-family tooling (tianheng and its guibiao coverage core), never on a workspace crate under judgment.";
 const KERNEL_ASYNC_REASON: &str = "the sans-I/O lifecycle kernel must stay runtime-agnostic: its public API must never expose an async fn, so no runtime shape leaks into the contract.";
+const KERNEL_NO_SERDE_REASON: &str = "the sans-I/O kernel is transient driving protocol, not durable state: it must not acquire Serialize/Deserialize, so persisting an in-flight directive or notice can never leak into the contract. Durable records (Pact, Claim, Retainer, Timestamp) carry serde; the kernel must not.";
+const CORE_NO_IO_REASON: &str = "the sans-I/O core contract performs no I/O: no code in pacta-contract (the kernel included) may call into std::io/fs/net/process; I/O lives in runtimes and backends outside the core. Coverage is partial by nature (I/O entry points cannot be enumerated, and macro-expanded I/O such as println! is invisible to a source scan), so this tooth complements review rather than replacing it.";
 const MEMORY_REASON: &str = "pacta-memory is a registry backend outside the core. It may depend only on pacta-contract and uuid, never on drivers, executors, or other backends.";
 const CONFORMANCE_REASON: &str = "pacta-conformance is a backend-agnostic test suite. It may depend only on pacta-contract and uuid, never on a specific backend.";
 const PROSE_REASON: &str =
@@ -151,12 +153,43 @@ fn constitution() -> Constitution {
                 .strict_external()
                 .because(AMBIENT_TIME_UUID_REASON),
         )
+        .boundary(
+            ModuleBoundary::in_crate("pacta-contract")
+                .module("crate")
+                .must_not_call_inline("std::io")
+                .because(CORE_NO_IO_REASON),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("pacta-contract")
+                .module("crate")
+                .must_not_call_inline("std::fs")
+                .because(CORE_NO_IO_REASON),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("pacta-contract")
+                .module("crate")
+                .must_not_call_inline("std::net")
+                .because(CORE_NO_IO_REASON),
+        )
+        .boundary(
+            ModuleBoundary::in_crate("pacta-contract")
+                .module("crate")
+                .must_not_call_inline("std::process")
+                .because(CORE_NO_IO_REASON),
+        )
         .async_exposure_boundary(
             AsyncExposureBoundary::in_crate("pacta-contract")
                 .module("crate::kernel")
                 .must_not_expose_async_fn()
                 .including_submodules()
                 .because(KERNEL_ASYNC_REASON),
+        )
+        .forbidden_marker_boundary(
+            ForbiddenMarkerBoundary::in_crate("pacta-contract")
+                .module("crate::kernel")
+                .must_not_acquire("Serialize")
+                .and_not_acquire("Deserialize")
+                .because(KERNEL_NO_SERDE_REASON),
         )
         .signature_boundary(
             SemanticBoundary::in_crate("pacta")
@@ -606,6 +639,27 @@ pub use pacta_driver::{
                 id.target == "crate" && id.rule == "must not expose"
             }),
             "expected the facade kernel-exclusion boundary to fire: {report:?}"
+        );
+    }
+
+    #[test]
+    fn kernel_serde_acquisition_reaction_fires() {
+        let outcome = semantic_reaction_outcome(
+            "pacta-governance-kernel-serde-leak",
+            "pub mod kernel {\n    #[derive(Serialize)]\n    pub struct Leak;\n}\n",
+            "",
+            "",
+        );
+
+        let Outcome::Violations(report) = outcome else {
+            panic!("expected a kernel forbidden-marker violation, got {outcome:?}");
+        };
+        assert!(
+            report.violations.iter().any(|violation| {
+                let id = violation.id();
+                id.target == "crate::kernel" && id.rule == "must not acquire trait"
+            }),
+            "expected the kernel no-serde boundary to fire: {report:?}"
         );
     }
 

@@ -13,12 +13,11 @@ depend only on those three crates and SHALL NOT depend on any backend crate.
 
 #### Scenario: Facade re-exports the compose-level surface
 - **WHEN** a downstream consumer depends only on `pacta`
-- **THEN** it can name `Pact`, `Claim`, `Retainer`, `Timestamp`, `Outcome`, `Settlement`, and `Registry`; `Executor`, `Execution`, `Middleware`, and `Policy`; and `Driver`, `Step`, and `DriverError`, without depending on the individual core crates directly
+- **THEN** it can name `Pact`, `Claim`, `Retainer`, `Timestamp`, `Outcome`, `Settlement`, and `Registry`; `Executor`, `Execution`, and `Middleware`; and `Driver`, `Step`, and `DriverError`, without depending on the individual core crates directly
 
 #### Scenario: Facade depends on no backend
 - **WHEN** `cargo run -p pacta-governance -- check --manifest-path Cargo.toml` runs
 - **THEN** the Tianheng constitution reports no violation, because `pacta` depends only on `pacta-contract`, `pacta-executor`, and `pacta-driver`
-
 ### Requirement: Facade Excludes The Kernel
 The facade's curated surface SHALL exclude the sans-I/O lifecycle kernel. The
 kernel (`Directive`, `Notice`, `Kernel`, `StepResult`, and the `kernel` module)

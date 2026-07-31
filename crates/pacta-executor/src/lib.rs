@@ -8,7 +8,12 @@ use pacta_contract::Pact;
 pub use pacta_contract::{Outcome, Settlement};
 
 /// A single attempt to fulfill a claimed pact.
+///
+/// This is the executor's designated input seam. It is `#[non_exhaustive]` so it can
+/// gain execution-context fields in a later minor release without a breaking change;
+/// construct it through [`Execution::new`].
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Execution {
     /// Pact being executed.
     pub pact: Pact,
@@ -31,33 +36,15 @@ pub trait Executor {
     fn execute(&mut self, execution: Execution) -> Result<Outcome, Self::Error>;
 }
 
-/// A Pacta-native decorator over execution.
+/// A Pacta-native decorator over execution: the Tower `Layer` analog. Because `wrap`
+/// takes an `Executor` and returns an `Executor`, middleware compose arbitrarily
+/// (the closure property), which is how orchestration is composed onto the seam.
 pub trait Middleware<E> {
     /// The wrapped executor type.
     type Executor: Executor;
 
     /// Wrap an executor with this middleware.
     fn wrap(&self, executor: E) -> Self::Executor;
-}
-
-/// A minimal policy value that names orchestration intent without behavior.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Policy {
-    name: &'static str,
-}
-
-impl Policy {
-    /// Create a new named policy.
-    #[must_use]
-    pub const fn new(name: &'static str) -> Self {
-        Self { name }
-    }
-
-    /// The name of the policy.
-    #[must_use]
-    pub const fn name(&self) -> &'static str {
-        self.name
-    }
 }
 
 #[cfg(test)]
@@ -120,12 +107,12 @@ mod tests {
     }
 
     fn dummy_execution() -> Execution {
-        Execution::new(Pact {
-            id: Default::default(),
-            docket: "dummy_docket".to_string(),
-            kind: "dummy_kind".to_string(),
-            clause: vec![],
-        })
+        Execution::new(Pact::new(
+            Default::default(),
+            "dummy_docket".to_string(),
+            "dummy_kind".to_string(),
+            vec![],
+        ))
     }
 
     #[test]
@@ -145,8 +132,24 @@ mod tests {
     }
 
     #[test]
-    fn policy_is_inspectable() {
-        let policy = Policy::new("retry");
-        assert_eq!(policy.name(), "retry");
+    fn stacked_middleware_composes() {
+        // The closure property: `Middleware` wraps `Executor` into `Executor`, so
+        // two middleware stack and still yield a working executor. This proves the
+        // "compose the rest" seam holds beyond a single wrap, and guards the
+        // `Middleware<E>` generic shape from regressing so it can no longer stack.
+        let inner = IdentityMiddleware.wrap(DummyExecutor);
+        let mut stacked = IdentityMiddleware.wrap(inner);
+        let outcome = stacked.execute(dummy_execution()).unwrap();
+        assert_eq!(outcome, Outcome::Fulfilled);
+    }
+
+    #[test]
+    fn stacked_middleware_preserves_ordering() {
+        // A breach layer wrapping an identity layer over a fulfilling executor still
+        // composes to a working executor whose outcome is the outermost layer's.
+        let inner = IdentityMiddleware.wrap(DummyExecutor);
+        let mut stacked = BreachMiddleware.wrap(inner);
+        let outcome = stacked.execute(dummy_execution()).unwrap();
+        assert_eq!(outcome, Outcome::Breached);
     }
 }

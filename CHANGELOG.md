@@ -23,9 +23,10 @@ First public release: the thin lifecycle foundation, not a complete durable runt
 - **Lease and lapse semantics**: claims carry a bounded lease; an expired lease is
   reclaimed through the normal claim path with a rotated retainer, so a stale holder
   cannot settle. Time is injected (`now: Timestamp`); the core reads no ambient clock.
-- **Execution composition** (`pacta-executor`): `Executor`, `Execution`,
-  `Middleware`, and `Policy` — Pacta-native vocabulary with no orchestration
-  behavior baked in.
+- **Execution composition** (`pacta-executor`): `Executor`, `Execution`, and
+  `Middleware` — the Tower `Service`/`Layer` shape narrowed to the lifecycle, with
+  no orchestration behavior baked in. `Middleware` composes `Executor` into
+  `Executor` (the closure property), proven by test.
 - **Runtime driver** (`pacta-driver`): a mechanical loop that performs the kernel's
   directives against a `Registry` and `Executor`, injecting the wall clock at the
   runtime edge. Public errors implement `std::error::Error` with source chaining.
@@ -37,7 +38,13 @@ First public release: the thin lifecycle foundation, not a complete durable runt
   and prove themselves against this suite.
 - **Executable governance** (`pacta-governance`, not published): a Tianheng
   constitution enforcing dependency boundaries, the kernel's async-freedom, the
-  core's no-ambient-clock rule, and active-prose drift.
+  core's no-ambient-clock and no-synchronous-I/O rules, the kernel's no-serde rule
+  (transient protocol is not durable state), the facade's kernel-exclusion and
+  re-exports-only shape, and active-prose drift.
+- **Frozen public surface**: a deliberate exhaustiveness/extensibility stance for
+  0.1.0 — growing enums (`Directive`/`Notice`/`StepResult`/`Step`/`DriverError`) and
+  the extensible records `Pact`/`Claim`/`Execution` are `#[non_exhaustive]` (records
+  gain `new` constructors); `Outcome` stays a closed settlement binary.
 
 ### Not included (deferred)
 
