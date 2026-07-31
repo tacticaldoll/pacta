@@ -187,7 +187,7 @@ where
 mod tests {
     use std::sync::Mutex;
 
-    use pacta_contract::{Claim, Pact, Retainer, Timestamp};
+    use pacta_contract::{Claim, Pact, Retainer, Timestamp, Transition};
     use uuid::Uuid;
 
     use super::*;
@@ -244,10 +244,22 @@ mod tests {
                 .take())
         }
 
-        fn heartbeat(&self, _retainer: &Retainer, _now: Timestamp) -> Result<(), Self::Error> {
+        fn lease_millis(&self) -> u64 {
+            0
+        }
+
+        // Required port; unused by these tests (the driver settles via fulfill/breach, which this
+        // registry overrides below to observe the driver's routing).
+        fn apply(
+            &self,
+            _retainer: &Retainer,
+            _transition: &Transition<'_>,
+        ) -> Result<(), Self::Error> {
             Ok(())
         }
 
+        // fulfill and breach are overridden (not to store state, but to count which the driver
+        // called), so the tests can assert the driver routes each outcome to the right op.
         fn fulfill(&self, _retainer: &Retainer) -> Result<(), Self::Error> {
             self.state
                 .lock()
@@ -261,14 +273,6 @@ mod tests {
                 .lock()
                 .expect("registry state should not be poisoned")
                 .breached += 1;
-            Ok(())
-        }
-
-        fn release(
-            &self,
-            _retainer: &Retainer,
-            _reclaimable_at: Timestamp,
-        ) -> Result<(), Self::Error> {
             Ok(())
         }
     }
