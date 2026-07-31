@@ -17,6 +17,7 @@ transitions: `claim`, `heartbeat`, `fulfill`, and `breach`.
 - **Registry**: Pure state machine. Never computes backoff, never manages delays,
   and never inspects clauses.
 - **Executor**: Public role for executing claimed pacts through middleware.
+- **Middleware / Policy**: Pacta-native decorators and orchestration intents. Currently an architectural skeleton; actual retry, timeout, and rate-limit behavior are deferred to future implementation.
 - **Contract**: Zero-dependency `pacta-contract` enforced by `tianheng`.
 
 ## Domain Language

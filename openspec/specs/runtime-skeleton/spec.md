@@ -23,6 +23,14 @@ Pacta SHALL expose an executor abstraction using Pacta runtime vocabulary rather
 - **WHEN** an executor cannot report a lifecycle outcome because execution infrastructure fails
 - **THEN** the failure is represented as the executor error rather than being collapsed into `Outcome::Breached`
 
+#### Scenario: Middleware composes executors
+- **WHEN** the executor crate exposes middleware composition
+- **THEN** the middleware API accepts an executor and returns an executor without requiring Tower or HTTP types
+
+#### Scenario: Policy remains non-behavioral in the skeleton
+- **WHEN** the executor crate exposes policy vocabulary
+- **THEN** policy values do not execute retry, timeout, rate-limit, delay, or scheduling behavior
+
 #### Scenario: Tower stays outside the core executor
 - **WHEN** the core executor crate is compiled
 - **THEN** it does not require `tower` as a dependency
@@ -56,6 +64,14 @@ Pacta SHALL keep orchestration policies out of the first runtime skeleton.
 #### Scenario: Retry is not in the skeleton
 - **WHEN** the runtime skeleton is implemented
 - **THEN** it does not compute retry attempts or backoff
+
+#### Scenario: Timeout is not in the skeleton
+- **WHEN** the middleware skeleton is implemented
+- **THEN** it does not enforce execution deadlines
+
+#### Scenario: Rate limiting is not in the skeleton
+- **WHEN** the middleware skeleton is implemented
+- **THEN** it does not throttle or schedule executions
 
 #### Scenario: Tribunal is not in the skeleton
 - **WHEN** the runtime skeleton is implemented
