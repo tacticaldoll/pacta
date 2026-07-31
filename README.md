@@ -71,9 +71,10 @@ Pacta owns  (mechanism, no policy)
   a reference Driver — runs your pieces, deciding no outcome itself
 ```
 
-The core owns the mechanism; you own the policy — and you own the runtime. The
-contract is colorless: async, `Send`, and executor choice are yours to compose, never
-baked into it. Orchestration such as retry, timeout, or backoff is not shipped — it
+The core owns the mechanism; you own the policy — and you own the runtime. The async
+binding forces no `Send` on its futures, so async and executor choice are yours to
+compose (a backend type is `Send + Sync`, thread-shareable, in both bindings).
+Orchestration such as retry, timeout, or backoff is not shipped — it
 composes onto the `Middleware` seam. You run your `Registry` and `Executor` with the
 reference `Driver`, or compose your own loop over the kernel.
 

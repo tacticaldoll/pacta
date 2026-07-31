@@ -151,18 +151,26 @@ syncing specs. This is the single source for the gate list — `README.md` and
 
 ```bash
 cargo build --workspace --all-features
+cargo build --workspace --no-default-features
 cargo test --workspace --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo clippy --workspace --no-default-features -- -D warnings
 cargo fmt --all --check
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 cargo deny check
 cargo run -p pacta-governance -- check --manifest-path Cargo.toml
 ```
 
-`--all-features` is required so the `async` feature — under which the async binding
-(`AsyncRegistry`, in `pacta-contract`) and the async reference backend and conformance run — stays
-covered by build, test, clippy, and doc; without it the feature-gated async code is invisible to the
-gate. (`fmt` and `cargo deny` are feature-independent.)
+Both ends of the feature space are gated. `--all-features` is required specifically so
+`pacta-memory`'s async reference backend and the async conformance runners (`run_async` parity and
+`run_async_contention`), gated on `pacta-memory`'s `async` feature, are exercised by build, test,
+clippy, and doc. (A plain workspace *test* build already compiles `pacta-contract`'s async binding
+and runs its async unit tests — dev-dependency feature unification pulls in `pacta-contract/async` —
+but those reference-backend and conformance checks stay gated off without `--all-features`.)
+`--no-default-features` keeps the **sync-only** surface covered: it compiles the workspace with
+`async` off, so an async item accidentally left un-gated, or an async-only symbol referenced from the
+sync path, fails to compile — protecting the promise that a sync-only consumer pulls no async.
+(`fmt` and `cargo deny` are feature-independent.)
 
 CI runs the same gates on push and pull request, and additionally verifies the
 declared MSRV builds (`cargo +1.88 build --workspace --all-features`). Rust style lives in these
