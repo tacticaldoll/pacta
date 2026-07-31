@@ -85,6 +85,7 @@ lifecycle outcomes itself.
 #### Scenario: Empty docket is idle
 - **WHEN** the registry returns no claim for a claim directive
 - **THEN** the kernel issues an idle directive and the driver runs no executor
+
 ### Requirement: Deferred Runtime Behavior
 Pacta SHALL keep orchestration policies out of the first runtime skeleton.
 

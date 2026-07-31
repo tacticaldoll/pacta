@@ -83,6 +83,7 @@ idempotent. Exactly-once delivery SHALL NOT be promised as a core guarantee.
 #### Scenario: Exactly-once is not claimed
 - **WHEN** Pacta describes its recovery guarantee
 - **THEN** it does not claim exactly-once delivery, which remains deferred
+
 ### Requirement: Mechanism Not Policy
 The registry SHALL own only the lease-expiry and lapse mechanism. It SHALL NOT own
 retry, backoff, attempt limits, or Tribunal routing, which stay user-owned through
