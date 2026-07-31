@@ -331,3 +331,49 @@ be proven to fire.
 - **WHEN** the governance test suite runs
 - **THEN** it asserts that the semantic check reports a `must not expose impl trait` violation for a fixture whose kernel returns `impl Future`, so the proof distinguishes a reacting boundary from one that always passes
 
+### Requirement: Governance Toolchain Upgrades Preserve Accepted Law
+Pacta SHALL preserve the observable intent and reaction evidence of its accepted Tianheng
+constitution when upgrading the governance toolchain. An upgrade SHALL NOT silently remove,
+widen, merge, weaken, baseline, or make vacuous an accepted boundary; each boundary's target, rule
+parameters, scan depth, severity, and complete reason SHALL remain represented unless a separate
+law amendment explicitly authorizes a change.
+
+#### Scenario: Upgrade preserves the declared boundary set
+- **WHEN** the Tianheng governance family is upgraded
+- **THEN** the post-upgrade constitution projection represents every pre-upgrade boundary with the
+  same target, rule parameters, scan depth, severity, and complete reason
+
+#### Scenario: Existing drift reactions still fire
+- **WHEN** a negative fixture commits a dependency, source, or semantic drift that an accepted
+  boundary rejected before the upgrade
+- **THEN** the post-upgrade governance suite reports the intended enforced violation rather than
+  passing, warning, or failing only for an unrelated reason
+
+#### Scenario: Clean evidence prevents an always-firing replacement
+- **WHEN** a matching fixture omits the drift targeted by a migrated reaction
+- **THEN** the post-upgrade governance suite reports no violation for that reaction
+
+#### Scenario: Upgrade-discovered drift is not absorbed
+- **WHEN** the upgraded governance tool reports a real violation in the current workspace
+- **THEN** the change repairs the drift or routes an explicit law amendment, and does not weaken the
+  boundary or add a baseline merely to complete the upgrade
+
+### Requirement: Accepted Law Projection Is Fresh
+Pacta SHALL carry a human- and agent-readable projection generated from the same Rust
+`Constitution` used by the project-native governance runner. The Rust declaration SHALL remain the
+authority, and an executable test SHALL fail when the checked-in projection is absent, unreadable,
+or stale.
+
+#### Scenario: Projection reflects the executable constitution
+- **WHEN** the checked-in law projection is compared with a fresh rendering of the Rust
+  `Constitution`
+- **THEN** the contents match byte for byte, including each projected boundary's complete reason
+
+#### Scenario: Constitution change makes stale projection fail
+- **WHEN** an accepted boundary changes without regenerating the checked-in law projection
+- **THEN** the governance test suite fails and identifies the projection and regeneration path
+
+#### Scenario: Projection is orientation rather than competing authority
+- **WHEN** contributor or agent guidance references the checked-in law projection
+- **THEN** it identifies the projection as derived from the Rust `Constitution` and continues to
+  treat OpenSpec specs as durable requirements

@@ -585,14 +585,32 @@ fn collect_rs_files(dir: &Path) -> Vec<PathBuf> {
 mod tests {
     use super::*;
 
+    const LAW_PROJECTION_PREAMBLE: &str = "\
+# Pacta Tianheng Law
+
+> Derived from the Rust `Constitution` in `crates/pacta-governance/src/main.rs`, which remains the
+> executable authority. OpenSpec specs remain the durable requirements. Do not edit this projection
+> by hand; regenerate it with
+> `BLESS=1 cargo test -p pacta-governance accepted_law_projection_is_fresh`.
+
+";
+
+    fn workspace_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    }
+
     #[test]
     fn current_workspace_satisfies_constitution() {
-        let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml");
+        GovernanceTest::for_constitution(constitution())
+            .with_manifest_dir(workspace_root())
+            .assert_clean();
+    }
 
-        assert_eq!(
-            check(constitution().static_boundaries(), &manifest),
-            Outcome::Clean
-        );
+    #[test]
+    fn accepted_law_projection_is_fresh() {
+        GovernanceTest::for_constitution(constitution())
+            .with_manifest_dir(workspace_root())
+            .assert_projection_fresh_with_preamble("AGENTS.pacta-law.md", LAW_PROJECTION_PREAMBLE);
     }
 
     #[test]
@@ -644,10 +662,9 @@ pacta-driver = { path = "../pacta-driver" }
             panic!("expected an unapproved dependency violation, got {outcome:?}");
         };
         assert!(report.violations.iter().any(|violation| {
-            let id = violation.id();
-            id.target == "pacta-contract"
-                && id.rule == "restrict dependencies to"
-                && id.finding == "tower"
+            violation.target() == "pacta-contract"
+                && violation.rule == "restrict dependencies to"
+                && violation.finding == "tower"
         }));
     }
 
@@ -691,8 +708,8 @@ pacta-driver = { path = "../pacta-driver" }
         for prefix in ["std::io", "std::fs", "std::net", "std::process"] {
             assert!(
                 report.violations.iter().any(|violation| {
-                    let id = violation.id();
-                    id.target == prefix && id.rule == "inline symbol path confined to module"
+                    violation.target() == prefix
+                        && violation.rule == "inline symbol path confined to module"
                 }),
                 "expected the {prefix} no-I/O boundary to fire: {report:?}"
             );
@@ -863,22 +880,9 @@ pub use pacta_contract::{Outcome, Settlement};
 
     #[test]
     fn every_workspace_crate_is_covered() {
-        // Tianheng coverage is advisory and never fails CI, so assert completeness
-        // here through the native projection. `check_and_cover` takes the static
-        // (guibiao) constitution and reads real `cargo metadata`.
-        let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml");
-        let (_outcome, coverage) =
-            guibiao::check_and_cover(constitution().static_boundaries(), &manifest);
-        let coverage = coverage.expect("workspace metadata should be readable in-repo");
-        assert!(
-            coverage.total > 0,
-            "coverage read no crates — the gate would pass vacuously"
-        );
-        assert!(
-            coverage.uncovered.is_empty(),
-            "every workspace crate must have a dependency boundary; ungoverned: {:?}",
-            coverage.uncovered
-        );
+        GovernanceTest::for_constitution(constitution())
+            .with_manifest_dir(workspace_root())
+            .assert_all_workspace_members_covered();
     }
 
     #[test]
@@ -971,8 +975,8 @@ pub use pacta_contract::{Outcome, Settlement};
         };
         assert!(
             report.violations.iter().any(|violation| {
-                let id = violation.id();
-                id.target == "crate::kernel" && id.rule == "must not expose async fn"
+                violation.target() == "crate::kernel"
+                    && violation.rule == "must not expose async fn"
             }),
             "expected the kernel async-exposure boundary to fire: {report:?}"
         );
@@ -992,8 +996,8 @@ pub use pacta_contract::{Outcome, Settlement};
         };
         assert!(
             report.violations.iter().any(|violation| {
-                let id = violation.id();
-                id.target == "crate::lifecycle" && id.rule == "must not expose async fn"
+                violation.target() == "crate::lifecycle"
+                    && violation.rule == "must not expose async fn"
             }),
             "expected the lifecycle async-exposure boundary to fire: {report:?}"
         );
@@ -1013,8 +1017,7 @@ pub use pacta_contract::{Outcome, Settlement};
         };
         assert!(
             report.violations.iter().any(|violation| {
-                let id = violation.id();
-                id.target == "crate" && id.rule == "must not expose"
+                violation.target() == "crate" && violation.rule == "must not expose"
             }),
             "expected the facade kernel-exclusion boundary to fire: {report:?}"
         );
@@ -1034,8 +1037,7 @@ pub use pacta_contract::{Outcome, Settlement};
         };
         assert!(
             report.violations.iter().any(|violation| {
-                let id = violation.id();
-                id.target == "crate::kernel" && id.rule == "must not acquire trait"
+                violation.target() == "crate::kernel" && violation.rule == "must not acquire trait"
             }),
             "expected the kernel no-serde boundary to fire: {report:?}"
         );
@@ -1057,8 +1059,8 @@ pub use pacta_contract::{Outcome, Settlement};
         };
         assert!(
             report.violations.iter().any(|violation| {
-                let id = violation.id();
-                id.target == "crate::kernel" && id.rule == "must not expose impl trait"
+                violation.target() == "crate::kernel"
+                    && violation.rule == "must not expose impl trait"
             }),
             "expected the kernel impl-trait boundary to fire: {report:?}"
         );
@@ -1078,8 +1080,8 @@ pub use pacta_contract::{Outcome, Settlement};
         };
         assert!(
             report.violations.iter().any(|violation| {
-                let id = violation.id();
-                id.target == "crate::lifecycle" && id.rule == "must not expose impl trait"
+                violation.target() == "crate::lifecycle"
+                    && violation.rule == "must not expose impl trait"
             }),
             "expected the lifecycle impl-trait boundary to fire: {report:?}"
         );

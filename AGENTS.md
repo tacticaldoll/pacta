@@ -38,6 +38,9 @@ Before proposing or writing code, protect these axioms:
 - `BACKLOG.md` records deferred decisions and candidate patterns, not mandatory
   phases.
 - `AGENTS.md` is operating protocol for agents and contributors.
+- `AGENTS.pacta-law.md` is the generated human/agent projection of the accepted
+  Rust `Constitution`; it is derived orientation, not a hand-maintained authority,
+  and a governance test fails when it is stale.
 
 Decision provenance lives in git — the commit body and pull request that made a
 change record its rationale. Forward-looking or reversed decisions are noted in

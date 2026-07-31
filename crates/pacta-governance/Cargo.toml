@@ -10,4 +10,3 @@ publish = false
 
 [dependencies]
 tianheng.workspace = true
-guibiao.workspace = true
