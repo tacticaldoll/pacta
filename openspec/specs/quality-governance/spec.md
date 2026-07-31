@@ -55,9 +55,8 @@ Pacta SHALL include active prose drift in its executable governance reaction.
 - **THEN** the governance output identifies the relative file path, line number, phrase, and reason
 
 #### Scenario: Historical prose is not governed
-- **WHEN** archived OpenSpec changes or ADRs contain historical architecture vocabulary
-- **THEN** active prose governance does not fail on that archived text
-
+- **WHEN** git history or superseded ADRs contain historical architecture vocabulary
+- **THEN** active prose governance does not fail on that historical text, because it scans only the active-prose file list
 ### Requirement: Supply Chain Policy
 Pacta SHALL use cargo-deny for resolved dependency supply-chain policy.
 

@@ -48,6 +48,6 @@ Pacta SHALL run an executable reaction that rejects high-risk stale architecture
 - **WHEN** the governance command checks active project prose containing a forbidden architecture-defining phrase
 - **THEN** the governance command fails with a report identifying the file and phrase
 
-#### Scenario: Governance ignores archived history
-- **WHEN** archived ADRs or archived OpenSpec changes contain older vocabulary
-- **THEN** the prose governance reaction does not fail solely because of that historical text
+#### Scenario: Governance ignores historical prose
+- **WHEN** git history or superseded ADRs contain older vocabulary
+- **THEN** the prose governance reaction does not fail because of that historical text, because it scans only the active-prose file list
