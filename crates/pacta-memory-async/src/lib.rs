@@ -5,15 +5,15 @@
 //! lifecycle semantics through the async binding and to calibrate real async durable backends
 //! against, which prove themselves the same way.
 //!
-//! It implements only the three [`AsyncRegistry`] primitives — a native [`claim`] selection and
-//! the [`load`] + [`cas`] transition port — plus [`lease_millis`]; the four transition
-//! operations come from the trait's default methods, which compose over the shared
-//! [`pacta_contract::lifecycle`] kernel. Its I/O is trivial (a `Mutex`), so its `async fn`s are
-//! ready futures — but it exercises the exact same async surface a durable backend implements.
+//! It implements only the two [`AsyncRegistry`] primitives — a native [`claim`] selection and
+//! the [`apply`] transition port — plus [`lease_millis`]; the four transition operations come from
+//! the trait's default methods, which compose over the shared [`pacta_contract::lifecycle`]
+//! kernel. Its atomic scope is one `Mutex` hold (load, decide, and store without releasing the
+//! lock), so its `async fn`s are ready futures — but it exercises the exact same async surface a
+//! durable backend implements.
 //!
 //! [`claim`]: AsyncRegistry::claim
-//! [`load`]: AsyncRegistry::load
-//! [`cas`]: AsyncRegistry::cas
+//! [`apply`]: AsyncRegistry::apply
 //! [`lease_millis`]: AsyncRegistry::lease_millis
 
 #![forbid(unsafe_code)]
@@ -24,7 +24,7 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use pacta_contract::lifecycle::{self, State};
 use pacta_contract::{Claim, Pact, Retainer, Timestamp};
-use pacta_contract_async::AsyncRegistry;
+use pacta_contract_async::{AsyncRegistry, Transition};
 use uuid::Uuid;
 
 /// The error returned when a retainer is not the current holder of any claim (a stale, settled,
@@ -89,41 +89,30 @@ impl AsyncRegistry for MemoryRegistryAsync {
         Ok(Some(Claim::new(records[index].0.clone(), retainer, expiry)))
     }
 
-    async fn load(&self, retainer: &Retainer) -> Result<Option<State>, NotHeld> {
-        let records = self
-            .records
-            .lock()
-            .expect("registry mutex should not be poisoned");
-        Ok(records
-            .iter()
-            .find(|(_, state)| {
-                matches!(state, State::Held { retainer: held, .. } if held == retainer)
-            })
-            .map(|(_, state)| state.clone()))
+    fn lease_millis(&self) -> u64 {
+        self.lease_millis
     }
 
-    async fn cas(
+    async fn apply(
         &self,
         _retainer: &Retainer,
-        expected: &State,
-        next: &State,
-    ) -> Result<bool, NotHeld> {
+        transition: &Transition<'_>,
+    ) -> Result<(), NotHeld> {
+        // One `Mutex` hold is the atomic scope: load, decide, and store without releasing the
+        // lock, so there is no load-then-store window to race. The transition carries the
+        // authority check, so the first record it accepts is the pact the retainer holds; a
+        // durable backend would instead load by `retainer`, and this in-memory scan is equivalent.
         let mut records = self
             .records
             .lock()
             .expect("registry mutex should not be poisoned");
-        // `expected` uniquely identifies the record (its retainer is part of the state), so a
-        // global state-equality match is the atomic compare-and-set the transition needs.
-        if let Some((_, state)) = records.iter_mut().find(|(_, state)| state == expected) {
-            *state = next.clone();
-            Ok(true)
-        } else {
-            Ok(false)
+        for (_, state) in records.iter_mut() {
+            if let Ok(next) = transition(state) {
+                *state = next;
+                return Ok(());
+            }
         }
-    }
-
-    fn lease_millis(&self) -> u64 {
-        self.lease_millis
+        Err(NotHeld)
     }
 }
 
@@ -154,9 +143,11 @@ mod tests {
         });
     }
 
-    /// The one property the parity runner cannot reach: the async binding decomposes each
-    /// transition into `load` then `cas`, a race the sync fat-verb shape does not have. Under real
-    /// multi-threaded contention the set-if-unchanged fence must apply the settlement at most once.
+    /// The one property the parity runner cannot reach: the at-most-once invariant every backend's
+    /// `apply` must uphold under concurrent contention, regardless of the concurrency-control
+    /// mechanism it uses (here, one `Mutex` scope). Asserted through the public `fulfill` op — not
+    /// by inspecting the mechanism — so it holds for any backend. Needs genuine multi-threaded
+    /// parallelism, because the reference backend's ready futures do not interleave single-threaded.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn concurrent_settle_applies_at_most_once() {
         // Enough iterations that an interleaving loading the same state in both tasks is hit, and
