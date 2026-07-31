@@ -135,6 +135,49 @@ pub trait Registry: Send + Sync {
 /// back. It performs no I/O
 /// and exposes no `async fn`, so it commits to no runtime shape. It encodes the
 /// lifecycle decision table only — it adds no orchestration behavior.
+///
+/// # Advanced surface
+///
+/// This is the **advanced** tier of Pacta's public API: lower stability intent than
+/// the recommended surface (its API may evolve as the runtime story settles), though
+/// it stays a supported, governed core surface — not unsupported or slated for
+/// removal. Most consumers should compose with the `Driver` runtime (or the `pacta`
+/// facade) and never touch the kernel. Reach for it only to build a custom runtime;
+/// it is reached through `pacta-contract` directly, never through the `pacta` facade.
+///
+/// # Driving the kernel
+///
+/// A runtime drives one lifecycle step by looping: ask [`poll`](kernel::Kernel::poll)
+/// for the next [`Directive`](kernel::Directive), perform it, report the outcome back with
+/// [`on_event`](kernel::Kernel::on_event), and repeat until [`result`](kernel::Kernel::result)
+/// yields a terminal [`StepResult`](kernel::StepResult). The kernel decides *what*;
+/// the runtime performs it and injects time — the kernel reads no clock.
+///
+/// ```
+/// use pacta_contract::kernel::{Directive, Kernel, Notice, StepResult};
+/// use pacta_contract::{Claim, Outcome, Pact, Retainer, Timestamp};
+///
+/// let mut kernel = Kernel::new();
+/// let mut available = Some(Claim {
+///     pact: Pact { id: Default::default(), docket: "demo".into(), kind: "demo".into(), clause: Vec::new() },
+///     retainer: Retainer::new(Default::default()),
+///     lease_expiry: Timestamp::from_millis(0),
+/// });
+///
+/// let result = loop {
+///     if let Some(result) = kernel.result() {
+///         break result;
+///     }
+///     match kernel.poll() {
+///         Directive::Claim => kernel.on_event(Notice::Claimed(available.take())),
+///         Directive::Execute(_pact) => kernel.on_event(Notice::Executed(Outcome::Fulfilled)),
+///         Directive::Settle(_retainer, _outcome) => kernel.on_event(Notice::Settled),
+///         Directive::Idle => break StepResult::Idle,
+///     }
+/// };
+///
+/// assert_eq!(result, StepResult::Settled(Outcome::Fulfilled));
+/// ```
 pub mod kernel {
     use crate::{Claim, Outcome, Pact, Retainer};
 
