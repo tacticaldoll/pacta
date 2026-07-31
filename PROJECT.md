@@ -35,7 +35,17 @@ The behavior that must be protected at all costs:
   `Registry` lifecycle authority. It does not own retries, timeouts, routing,
   scheduling, transport adapters, or backend-specific business behavior.
 - **Composition over accumulation**: execution behavior grows through
-  Pacta-native middleware, policies, and future governed design patterns.
+  Pacta-native middleware, policies, and named governed design patterns — the
+  first of which is the transition port (`apply`): the backend owns *how* a
+  transition is applied atomically, the kernel owns *what* it decides.
+- **The runtime is the consumer's**: pacta owns the colorless mechanism; async,
+  `Send`, and executor choice are the consumer's composition and are never baked
+  into the contract. The contract carries no runtime coloring.
+- **Correctness is self-proven**: `pacta-conformance` is the definition of a
+  correct backend, so a design is proven when the reference backend passes the
+  suite — never validated by a downstream consumer. Consumers ignite pacta's
+  work; they never gate it, and performance on a real backend is consumer-owned
+  edge, not a correctness gate.
 - **Adapter boundary**: framework, transport, and storage integrations remain
   outside the core and cannot define first-layer Pacta APIs.
 - **Governance with teeth**: Tianheng and project specs enforce the boundaries

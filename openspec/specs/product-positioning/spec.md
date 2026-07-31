@@ -73,3 +73,24 @@ rather than as shipped retry, timeout, or backoff — and SHALL name no sibling 
 - **WHEN** the composition pattern is documented
 - **THEN** it presents `Middleware` as the seam where policy such as retry, timeout, or fail-fast composes, without presenting those as behavior Pacta ships
 
+### Requirement: Correctness Is Conformance-Self-Proven
+Pacta SHALL present the correctness of its contract as self-proven by `pacta-conformance` against a
+reference backend, and SHALL NOT gate the correctness, stabilization, or release of a design on
+validation by a downstream consumer. Because pacta ships a pure pattern and `pacta-conformance` is
+the definition of a correct backend, a design whose correctness the suite can express is proven when
+the reference backend passes it; requiring a real consumer to prove it would concede the contract is
+incomplete and the pattern impure. Performance under a specific backend (throughput, latency) is edge
+behavior the consumer owns, and SHALL NOT be treated as a pacta correctness gate.
+
+#### Scenario: Correctness prose appeals to conformance, not a consumer
+- **WHEN** active project prose claims a contract or binding is correct or ready
+- **THEN** it grounds that claim in `pacta-conformance` self-proof against the reference backend, not in validation by any named or hypothetical downstream consumer
+
+#### Scenario: A design stabilizes on pacta's own authority
+- **WHEN** prose records that a design may stabilize, freeze, or publish
+- **THEN** its criteria are properties pacta can prove itself (the suite expresses them and the reference backend passes), and name no external consumer's review or adoption as the gate
+
+#### Scenario: Performance is edge, not a correctness gate
+- **WHEN** prose mentions a backend's throughput or latency
+- **THEN** it frames that as consumer-owned edge behavior, not as evidence pacta's contract is or is not correct
+
