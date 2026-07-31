@@ -36,7 +36,9 @@
 //! backend runs the `pacta-conformance` suite (a dev-dependency) and passing it is what it
 //! means to satisfy the contract — the backend author's two-crate journey is implement
 //! `Registry` from `pacta`, then prove it with `pacta-conformance`. Durable backends
-//! live outside this workspace and prove themselves the same way.
+//! live outside this workspace and prove themselves the same way. A backend type need not be
+//! [`Send`] or [`Sync`]: a single-threaded backend may stay local, while a caller that shares or
+//! moves it across threads adds `Send + Sync` at that concurrency boundary.
 //!
 //! **What you owe in return (the obligation half).** Recovery is *at-least-once*,
 //! not exactly-once: a pact whose holder stops without settling is reclaimed and may

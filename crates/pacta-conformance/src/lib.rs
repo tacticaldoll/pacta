@@ -40,7 +40,9 @@ fn a_pact() -> Pact {
 ///
 /// `make(pacts, lease_millis)` must return a fresh registry seeded with `pacts`
 /// and configured to lease claims for `lease_millis`. The suite calls it once per
-/// scenario. A failing assertion panics, failing the calling test.
+/// scenario. A failing assertion panics, failing the calling test. This sequential
+/// suite requires no `Send` or `Sync` bound on the backend; thread shareability is
+/// required separately by [`run_contention`].
 pub fn run<R, F>(make: F)
 where
     R: Registry,
@@ -82,6 +84,9 @@ pub const CONTENTION_ROUNDS: usize = 2000;
 ///
 /// This is the sync sibling of [`run_async_contention`]; the async binding has its own because a
 /// backend implements only one of the two bindings.
+///
+/// Unlike [`run`], this entry shares `Arc<R>` across OS threads and therefore requires
+/// `R: Send + Sync + 'static` explicitly.
 pub fn run_contention<R, F>(make: F)
 where
     R: Registry + Send + Sync + 'static,
@@ -196,7 +201,9 @@ where
 /// [`run_async_with`] takes a caller-supplied [`BlockingDriver`], so a **real-reactor** backend runs
 /// the scenarios on its own runtime; [`run_async`] uses the built-in [`SelfProgress`] driver and is
 /// correct only for backends whose futures make progress without an external reactor. Neither
-/// imposes a `Send` bound on the backend's futures or pulls an async runtime into the crate.
+/// requires the backend type or blocking driver to be `Send` or `Sync`, imposes a `Send` bound on
+/// the backend's futures, or pulls an async runtime into the crate. Thread shareability belongs to
+/// the separate [`run_async_contention`] entry.
 #[cfg(feature = "async")]
 mod async_runner {
     use core::future::Future;
@@ -208,6 +215,8 @@ mod async_runner {
     /// runtime without the conformance suite committing to one. The method is generic over the
     /// future and imposes **no `Send` bound**, so future coloring stays the backend's; it is a
     /// static bound (no `dyn`, no boxing), so the crate takes on no async-runtime dependency.
+    /// The driver type itself need not be `Send` or `Sync`; this sequential adapter never moves it
+    /// across threads.
     ///
     /// A real-reactor backend implements this over its runtime (for example a wrapper whose `drive`
     /// calls `tokio::runtime::Runtime::block_on`) and passes it to [`run_async_with`]. A backend
@@ -256,7 +265,7 @@ mod async_runner {
         driver: D,
     }
 
-    impl<R: AsyncRegistry, D: BlockingDriver + Send + Sync> Registry for BlockOn<R, D> {
+    impl<R: AsyncRegistry, D: BlockingDriver> Registry for BlockOn<R, D> {
         type Error = R::Error;
 
         fn claim(&self, dockets: &[&str], now: Timestamp) -> Result<Option<Claim>, Self::Error> {
@@ -279,7 +288,8 @@ mod async_runner {
     /// Run the full conformance suite against an async backend built by `make`, driving its futures
     /// with a caller-supplied `driver`. A real-reactor backend passes a driver wrapping its own
     /// runtime, so the shared scenarios run on that runtime — no scenario is re-declared, and the
-    /// entry imposes no `Send` bound and adds no async-runtime dependency.
+    /// entry imposes no `Send` or `Sync` bound on the backend type or driver, no `Send` bound on
+    /// the backend's futures, and adds no async-runtime dependency.
     ///
     /// `make(pacts, lease_millis)` returns a fresh async registry seeded with `pacts`, exactly as
     /// [`run`](crate::run) expects for the sync binding.
@@ -288,7 +298,7 @@ mod async_runner {
         R: AsyncRegistry,
         R::Error: core::fmt::Debug,
         F: Fn(Vec<Pact>, u64) -> R,
-        D: BlockingDriver + Copy + Send + Sync,
+        D: BlockingDriver + Copy,
     {
         crate::run(move |pacts, lease_millis| BlockOn {
             registry: make(pacts, lease_millis),
@@ -324,10 +334,11 @@ mod async_runner {
     /// required** — the suite pulls no async runtime. Like [`run_async`], this convenience is for
     /// ready-future backends; the repetition count is a **probabilistic stress**, not a
     /// deterministic proof (the harness's teeth are proven by the barrier-synchronized broken
-    /// fixture in this crate's tests).
+    /// fixture in this crate's tests). Because this entry shares `Arc<R>` across those OS threads,
+    /// it requires `R: Send + Sync + 'static` explicitly; the sequential async entries do not.
     pub fn run_async_contention<R, F>(make: F)
     where
-        R: AsyncRegistry + 'static,
+        R: AsyncRegistry + Send + Sync + 'static,
         R::Error: core::fmt::Debug + Send,
         F: Fn(Vec<Pact>, u64) -> R,
     {

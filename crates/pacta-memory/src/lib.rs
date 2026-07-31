@@ -200,10 +200,103 @@ impl pacta_contract::AsyncRegistry for MemoryRegistryAsync {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::marker::PhantomData;
+    use std::rc::Rc;
+
+    struct LocalRegistry {
+        inner: MemoryRegistry,
+        _local: Rc<()>,
+    }
+
+    impl LocalRegistry {
+        fn seeded(pacts: Vec<Pact>, lease_millis: u64) -> Self {
+            Self {
+                inner: MemoryRegistry::seeded(pacts, lease_millis),
+                _local: Rc::new(()),
+            }
+        }
+    }
+
+    impl Registry for LocalRegistry {
+        type Error = NotHeld;
+
+        fn claim(&self, dockets: &[&str], now: Timestamp) -> Result<Option<Claim>, Self::Error> {
+            self.inner.claim(dockets, now)
+        }
+
+        fn lease_millis(&self) -> u64 {
+            self.inner.lease_millis()
+        }
+
+        fn apply(
+            &self,
+            retainer: &Retainer,
+            transition: &Transition<'_>,
+        ) -> Result<(), Self::Error> {
+            self.inner.apply(retainer, transition)
+        }
+    }
+
+    #[cfg(feature = "async")]
+    struct LocalRegistryAsync {
+        inner: MemoryRegistryAsync,
+        _local: Rc<()>,
+    }
+
+    #[cfg(feature = "async")]
+    impl LocalRegistryAsync {
+        fn seeded(pacts: Vec<Pact>, lease_millis: u64) -> Self {
+            Self {
+                inner: MemoryRegistryAsync::seeded(pacts, lease_millis),
+                _local: Rc::new(()),
+            }
+        }
+    }
+
+    #[cfg(feature = "async")]
+    impl pacta_contract::AsyncRegistry for LocalRegistryAsync {
+        type Error = NotHeld;
+
+        async fn claim(
+            &self,
+            dockets: &[&str],
+            now: Timestamp,
+        ) -> Result<Option<Claim>, Self::Error> {
+            pacta_contract::AsyncRegistry::claim(&self.inner, dockets, now).await
+        }
+
+        fn lease_millis(&self) -> u64 {
+            pacta_contract::AsyncRegistry::lease_millis(&self.inner)
+        }
+
+        async fn apply(
+            &self,
+            retainer: &Retainer,
+            transition: &Transition<'_>,
+        ) -> Result<(), Self::Error> {
+            pacta_contract::AsyncRegistry::apply(&self.inner, retainer, transition).await
+        }
+    }
+
+    #[cfg(feature = "async")]
+    #[derive(Clone, Copy)]
+    struct LocalDriver(PhantomData<Rc<()>>);
+
+    #[cfg(feature = "async")]
+    impl pacta_conformance::BlockingDriver for LocalDriver {
+        fn drive<F: core::future::Future>(&self, future: F) -> F::Output {
+            pacta_conformance::BlockingDriver::drive(&pacta_conformance::SelfProgress, future)
+        }
+    }
 
     #[test]
     fn passes_registry_conformance() {
         pacta_conformance::run(MemoryRegistry::seeded);
+    }
+
+    #[test]
+    fn local_sync_backend_passes_sequential_conformance() {
+        pacta_conformance::run(LocalRegistry::seeded);
     }
 
     /// The sync reference backend upholds at-most-once authority under real concurrent claim and
@@ -303,6 +396,18 @@ mod tests {
     #[test]
     fn passes_async_conformance() {
         pacta_conformance::run_async(MemoryRegistryAsync::seeded);
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn local_async_backend_passes_ready_future_conformance() {
+        pacta_conformance::run_async(LocalRegistryAsync::seeded);
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn local_async_backend_and_driver_pass_runtime_compatible_conformance() {
+        pacta_conformance::run_async_with(LocalRegistryAsync::seeded, LocalDriver(PhantomData));
     }
 
     /// The async binding enforces authority the same way: a stranger retainer with an any-state

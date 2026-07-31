@@ -103,3 +103,26 @@ compare-and-set strategy, and any bound on its retrying is composed by the calle
 #### Scenario: Documenting the contract adds no orchestration
 - **WHEN** the `apply_via_cas` contract is clarified
 - **THEN** the helper gains no retry policy, backoff, timeout, cancellation, or runtime, remaining the minimal set-if-unchanged strategy
+
+### Requirement: Async Backend-Type Coloring Is Consumer-Owned
+`AsyncRegistry` SHALL impose no `Send` or `Sync` supertrait on the backend type,
+just as it imposes no `Send` bound on the futures its methods return. The
+`Transition` port SHALL remain `Send + Sync`: that bound applies to the pure
+decision closure and SHALL NOT be presented as coloring either the backend type or
+the future.
+
+#### Scenario: A local async backend stays local
+- **WHEN** an async backend is used only on one thread and its type is not `Send`
+  or `Sync`
+- **THEN** the `AsyncRegistry` binding accepts it without selecting a runtime or
+  forcing cross-thread execution
+
+#### Scenario: Async futures remain Send-agnostic
+- **WHEN** a backend implements the relaxed async binding
+- **THEN** its method futures still carry no binding-imposed `Send` requirement
+
+#### Scenario: Transition closure sharing remains available
+- **WHEN** an async backend needs to hold or hand off a lifecycle decision inside
+  its atomic implementation
+- **THEN** `Transition<'_>` remains `Send + Sync` independently of the backend and
+  future coloring
