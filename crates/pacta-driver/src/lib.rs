@@ -40,6 +40,32 @@ pub enum DriverError<RegistryError, ExecutorError> {
     Executor(ExecutorError),
 }
 
+impl<RegistryError, ExecutorError> std::fmt::Display for DriverError<RegistryError, ExecutorError>
+where
+    RegistryError: std::error::Error,
+    ExecutorError: std::error::Error,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Registry(error) => write!(f, "registry operation failed: {error}"),
+            Self::Executor(error) => write!(f, "executor infrastructure failed: {error}"),
+        }
+    }
+}
+
+impl<RegistryError, ExecutorError> std::error::Error for DriverError<RegistryError, ExecutorError>
+where
+    RegistryError: std::error::Error + 'static,
+    ExecutorError: std::error::Error + 'static,
+{
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Registry(error) => Some(error),
+            Self::Executor(error) => Some(error),
+        }
+    }
+}
+
 /// Mechanical loop that performs the directives the sans-I/O kernel issues.
 pub struct Driver<R, E> {
     registry: R,
@@ -143,6 +169,17 @@ mod tests {
 
     use super::*;
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct TestError;
+
+    impl std::fmt::Display for TestError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "test error")
+        }
+    }
+
+    impl std::error::Error for TestError {}
+
     #[derive(Default)]
     struct RegistryState {
         claim: Option<Claim>,
@@ -168,7 +205,7 @@ mod tests {
     }
 
     impl Registry for TestRegistry {
-        type Error = ();
+        type Error = TestError;
 
         fn claim(&self, dockets: &[&str], _now: Timestamp) -> Result<Option<Claim>, Self::Error> {
             self.state
@@ -206,12 +243,12 @@ mod tests {
     }
 
     struct TestExecutor {
-        outcome: Result<Outcome, ()>,
+        outcome: Result<Outcome, TestError>,
         executions: usize,
     }
 
     impl Executor for TestExecutor {
-        type Error = ();
+        type Error = TestError;
 
         fn execute(&mut self, _execution: Execution) -> Result<Outcome, Self::Error> {
             self.executions += 1;
@@ -278,12 +315,12 @@ mod tests {
     fn executor_error_breaches_claim() {
         let registry = TestRegistry::with_claim(claim());
         let executor = TestExecutor {
-            outcome: Err(()),
+            outcome: Err(TestError),
             executions: 0,
         };
         let mut driver = Driver::new(registry, executor, ["default".to_string()]);
 
-        assert_eq!(driver.step(), Err(DriverError::Executor(())));
+        assert_eq!(driver.step(), Err(DriverError::Executor(TestError)));
         let state = driver
             .registry()
             .state
@@ -314,5 +351,36 @@ mod tests {
         assert_eq!(state.breached, 0);
         drop(state);
         assert_eq!(driver.executor().executions, 0);
+    }
+
+    #[test]
+    fn driver_error_displays_and_exposes_source() {
+        use std::error::Error;
+
+        let executor_error: DriverError<TestError, TestError> = DriverError::Executor(TestError);
+        assert_eq!(
+            executor_error.to_string(),
+            "executor infrastructure failed: test error"
+        );
+        assert_eq!(
+            executor_error
+                .source()
+                .expect("driver error should expose its source")
+                .to_string(),
+            "test error"
+        );
+
+        let registry_error: DriverError<TestError, TestError> = DriverError::Registry(TestError);
+        assert_eq!(
+            registry_error.to_string(),
+            "registry operation failed: test error"
+        );
+        assert_eq!(
+            registry_error
+                .source()
+                .expect("driver error should expose its source")
+                .to_string(),
+            "test error"
+        );
     }
 }
