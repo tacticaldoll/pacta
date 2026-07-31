@@ -88,214 +88,101 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
 
 - Durable `Registry` backends such as SQLite or Postgres, living outside the
   workspace and proving themselves against `pacta-conformance`.
-- An async `Registry` variant — **forced, and now decided** (see below).
-  - **Forced now (2026-07, dogfood finding from worklane).** worklane — a real
-    durable, multi-backend (SQLite/Postgres/Redis), concurrent, shipping queue —
-    adopted the `Registry` shape and immediately hit the wall: its backends do
-    async I/O (tokio-postgres, redis async), so they cannot implement the
-    synchronous `Registry` (`fn claim(&self, …) -> Result<…>`). `block_on` inside
-    the runtime is a non-starter. The sync `Registry` fits only sync/in-memory
-    backends; a durable async backend needs an async variant. worklane is the
-    forcing consumer this item anticipated.
-  - **Proven async shape (from worklane's mirror-port):** the same method set and
-    semantics, made async — `async fn claim(&self, dockets, now) -> Option<Claim>`,
-    `heartbeat`, `fulfill`, `breach`, `release(retainer, reclaimable_at)` — with
-    the retainer-rotation fencing and consumer-injected `reclaimable_at` unchanged.
-    worklane will keep this shape in its own async port; when pacta ships an async
-    `Registry` matching it, worklane can depend on pacta's trait directly, closing
-    the loop.
-  - **Semantics validated on a real durable backend (2026-07).** Beyond the async
-    wall, the port also confirmed the *semantics* are complete and portable: on a
-    real SQLite backend, retry and defer both delegate to one `release`-shaped op,
-    the attempts-increment living cleanly backend-side — reinforcing the
-    claim-authority triage (counting is backend, not contract). So the only gap the
-    port surfaced is the async *shape*, not any missing semantics.
-  - **Decided (2026-07-15): deliver the async binding as a second binding of the
-    frozen contract.** By the claim-authority test this is not new semantics — the
-    claim authority behaves identically — so it is a second *binding* of the frozen
-    op set, not a contract expansion (zero semantic risk; the semantics are frozen
-    and dogfood-proven). Positioning: sans-I/O purity lives in a **colorless Kernel
-    + conformance**, not in the calling convention; `Registry` is an I/O **port**
-    with sync and async bindings; the two bindings differ only in async color, with
-    semantics single-sourced. I/O is invisible in both bindings' types (Rust has no
-    I/O effect); async merely carries the runtime-coupling color.
+- An async `Registry` variant — **shipped** (toward 0.1.3). A durable backend that does async
+  I/O cannot implement the synchronous `Registry` (`fn claim(&self, …) -> Result<…>`), and
+  `block_on` inside a runtime is a non-starter; the sync trait fits only sync/in-memory backends.
+  The async variant is delivered as a **second binding of the frozen contract**, not new
+  semantics: by the claim-authority test the claim authority behaves identically, so it is a
+  second *binding* of the frozen op set (zero semantic risk; the semantics are frozen and
+  conformance-proven). It also confirmed the semantics are complete and portable — on a real
+  durable backend, retry and defer both delegate to one `release`-shaped op with the
+  attempts-increment living backend-side, reinforcing the claim-authority triage (counting is
+  backend, not contract). The only gap the async work surfaced is the async *shape*, not any
+  missing semantics.
+  - **Positioning:** sans-I/O purity lives in a **colorless kernel + conformance**, not in the
+    calling convention; `Registry` is an I/O **port** with sync and async bindings that differ
+    only in async color, with semantics single-sourced. I/O is invisible in both bindings' types
+    (Rust has no I/O effect); async merely carries the runtime-coupling color.
   - **Landing shape (sans-I/O decomposition):**
-    - **Colorless Kernel** holds *all* lifecycle semantics (eligibility invariant,
-      lease/retainer, `reclaimable_at`, transition state machines). Lifted out of
-      `pacta-memory` into `pacta-contract` as additive **syn-free** pure functions;
-      the sync impl is refactored to call it (behavior-preserving). "Frozen" = the
-      five-op public surface is frozen, not that the crate never takes an additive
-      minor.
-    - **Two colored port primitives**, split by op shape (not one fat port):
-      ① `cas(by_retainer, expect, new)` — truly semantics-free, cannot drift;
-      ② `claim_select(dockets, now)` — carries the fixed eligibility invariant,
-      re-expressed **natively per backend** (a full-scan-free selection, e.g. SQL
-      `SKIP LOCKED`), so it is a *translation* (conformance-caught), and the only
-      unproven risk lives here.
-    - **Async trait (as shipped) = 3 required primitives + a lease accessor + 4
-      Kernel-driven default methods**: primitives `claim`/`load`/`cas` and
-      `lease_millis`; defaults heartbeat/fulfill/breach/release. Callers see the
-      faithful five-op contract; backends implement the three primitives. (The
-      planned 2-primitive `cas` + `claim_select` shape shipped as `claim` plus a
-      `load`/`cas` transition port — a load/cas split, conformance-caught. The
-      earlier "2 primitives + 5 defaults" wording described the plan, not the
-      shipped trait.) The frozen **sync** trait keeps its five fat required methods
-      unchanged.
-    - **Ordering/priority is edge policy** (the consumer's, single-sourced in the
-      consumer), never a pacta spec parameter — so eligibility-as-data cannot grow
-      into a query DSL. Eligibility stays a fixed invariant baked into the contract.
-  - **Crate topology** (forced by version-cadence isolation + not forcing the async
-    dep on sync-only consumers — a shared `async` feature would, via cargo feature
-    unification, compile `async-trait` and the async-runtime coupling into sync-only
-    consumers sharing the build graph; a separate, explicitly-depended crate avoids
-    that. NB: pacta-contract is **not** syn-free today — it already pulls `syn` via
-    `serde_derive` — so the earlier "syn-free footprint" wording was wrong; the reasons
-    above are the real ones):
-    new **`pacta-contract-async`** (async ports, deps `pacta-contract`), new
-    **`pacta-memory-async`** (async reference backend), and `pacta-conformance`
-    gains an **async runner** over the single-source scenario data. `#[async_trait]`
-    vs native AFIT is an internal detail of `pacta-contract-async` (must yield
+    - **Colorless kernel** holds *all* lifecycle semantics (eligibility invariant, lease/retainer,
+      `reclaimable_at`, transition state machines), lifted into `pacta-contract` as additive pure
+      functions; the sync impl calls it (behavior-preserving). "Frozen" = the five-op public
+      surface is frozen, not that the crate never takes an additive minor.
+    - **Async trait = 3 required primitives + a lease accessor + 4 kernel-driven default methods**:
+      primitives `claim`/`load`/`cas` and `lease_millis`; defaults heartbeat/fulfill/breach/release.
+      Callers see the faithful five-op contract; backends implement the three primitives. `claim`
+      carries the fixed eligibility invariant, re-expressed **natively per backend** (a
+      full-scan-free selection, e.g. SQL `SKIP LOCKED`), so it is a *translation* (conformance-
+      caught) and the only unproven risk lives there; the `load`/`cas` transition port is truly
+      semantics-free. The frozen **sync** trait keeps its five required methods unchanged.
+    - **Ordering/priority is edge policy** (the consumer's), never a pacta spec parameter — so
+      eligibility-as-data cannot grow into a query DSL. Eligibility stays a fixed invariant baked
+      into the contract.
+  - **Crate topology** (forced by version-cadence isolation + not forcing the async dep on
+    sync-only consumers — a shared `async` feature would, via cargo feature unification, compile
+    `async-trait` and the async-runtime coupling into sync-only consumers sharing the build graph;
+    a separate, explicitly-depended crate avoids that): **`pacta-contract-async`** (async ports,
+    deps `pacta-contract`), **`pacta-memory-async`** (async reference backend), and
+    `pacta-conformance` gained an **async runner** over the single-source scenario data.
+    `#[async_trait]` vs native AFIT is an internal detail of `pacta-contract-async` (must yield
     `Send` futures for tokio).
-  - **Scope guard:** do **not** add create / breach-reason / by-id classify to any
-    trait (the claim-authority triage above declined all three; async does not
-    change that). No async `Executor`/`Driver` (no consumer forces pacta's reference
-    async runtime; the consumer has its own loop).
-  - **Plan (spike-first, to surface the ② risk before building the pipeline):**
-    1. **② throughput spike** (throwaway): reshape the consumer's existing async
-       `SKIP LOCKED` reserve into the `claim_select(dockets, now)` single-primitive
-       shape; bench concurrency vs the original. Gate: throughput within bound and
-       zero-retry preserved — else the ② shape is wrong, stop and redesign.
-    2. **Kernel lift** into `pacta-contract` (additive, syn-free); sync impl calls
-       it. Gate: sync `pacta-conformance` green + `pacta-contract` still syn-free +
-       guibiao/hunyi green. (Parallel with 1.)
-    3. **`pacta-contract-async`** `AsyncRegistry` = 2 primitives + 5 Kernel defaults.
-       Gate: trivial 2-primitive impl yields the 5 ops via defaults; Kernel subtree
-       no pub `async fn`.
-    4. **`pacta-memory-async` + async conformance runner** over the same scenarios.
-       Gate: the scenario set the sync runner passes also passes async — faithful,
-       zero scenario duplication.
-    5. **Consumer rebind** onto `pacta-contract-async` (native `claim_select`,
-       mirror-port dropped) + louke post-verify half-guard (selected row re-checked
-       against `Kernel.is_eligible`). Gate: consumer's full conformance stays green;
-       injected ineligible selection is rejected.
-    6. **Concurrency/throughput gate** on the rebound native `claim_select` per
-       backend — the ② de-risk exit (functional-green ≠ hot-path-safe).
-    7. **hunyi/louke/guibiao wiring** (Kernel no pub `async fn`; facade leaks no
-       `pacta_*`; allowlist forbids executor/driver/memory in prod; reserve
-       mutual-exclusion runtime asserts) — each proven by a reaction test.
-  - **Status: warranted but not urgent** (the consumer is unblocked via its own
-    mirror-port). Decided and planned; **not yet an active change** — open the change
-    (and the step-1 spike may run independently) when pacta work is scheduled.
-  - **Landed toward 0.1.3:** the `lifecycle` kernel (single-sourced semantics),
-    `pacta-contract-async` (the `AsyncRegistry` binding), `pacta-memory-async`
-    (the reference async backend), and — via `add-async-conformance` — the shared async
-    conformance runner: pacta proves its own contract against its own reference backend, on its
-    own authority. A consumer *ignites* the async work; it does not *gate* it (the earlier
-    "deferred until worklane's rebind forces it" framing inverted that, and is dropped). Still
-    pending, and consumer-side rather than a pacta gate: the `claim_select` throughput spike
-    (worklane side, a real durable backend under contention).
-  - **Fence-rule divergence: pacta contract vs worklane (a worklane-rebind finding, not a
-    pacta change).** pacta's lifecycle fences settlement on **reclaim**, not on expiry: a
-    holder whose lease has lapsed but whose pact **nobody has reclaimed yet** can still
-    `fulfill`/`breach`/`release` (its retainer is still the current holder). This is
+  - **Scope guard:** do **not** add create / breach-reason / by-id classify to any trait (the
+    claim-authority triage declined all three; async does not change that). No async
+    `Executor`/`Driver` — the reference async runtime is not forced, since a consumer brings its
+    own loop.
+  - **Shipped (toward 0.1.3):** the `lifecycle` kernel (single-sourced semantics),
+    `pacta-contract-async` (the `AsyncRegistry` binding), `pacta-memory-async` (the reference async
+    backend), and the shared async conformance runner. Pacta proves its own contract against its
+    own reference backend, on its own authority. The remaining `claim` throughput de-risk (a real
+    durable backend under concurrent contention) is external to this workspace and cannot be
+    discharged from pacta; note it honestly in release notes as "durable concurrent throughput
+    proven consumer-side."
+  - **Reclaim-fence (a pacta contract property).** Pacta's lifecycle fences settlement on
+    **reclaim**, not on expiry: a holder whose lease has lapsed but whose pact **nobody has
+    reclaimed yet** can still `fulfill`/`breach`/`release` (its retainer is still the current
+    holder). Heartbeat likewise treats `now == expiry` as still-alive (`expiry >= now`). This is
     deliberate, shipped, and proven — `pacta-conformance::late_fulfill_before_reclaim_succeeds`
     ("a late fulfill of genuinely-done work settles") and the `lifecycle-persistence`
-    reclaim-rotation requirement ("settlement rejected **only after** the pact is reclaimed").
-    Heartbeat likewise treats `now == expiry` as still-alive (`expiry >= now`). The async
-    binding faithfully mirrors this (so async ↔ sync do not drift). **worklane's shipped model
-    fences on expiry instead** (`leased_until > now`: a lapsed ack → `StaleReservation` →
-    requeue), and its boundary is exclusive. So worklane **cannot** preserve its own behavior
-    by rebinding onto pacta's contract on this point — exactly the pacta finding worklane's
-    dogfood stop-condition anticipated. Reconciliation is **worklane's**, at rebind: either
-    adopt pacta's reclaim-fence (a deliberate change to worklane's behavior + its conformance),
-    or keep worklane's expiry-fence in its own port (not a full rebind here). **Not** a pacta
-    change: aligning pacta to worklane would be a *breaking* change to a published, spec'd,
-    conformance-tested semantic — and reclaim-fence is arguably the better design (it salvages
-    genuinely-done work rather than redundantly requeuing it). If reclaim-fence is ever
-    reconsidered, that is a separate claim-authority case, never smuggled into the async work.
-  - **Fence reconciliation — RESOLVED (2026-07-16): move 2, worklane adopts reclaim-fence.**
-    The go/no-go (below) was decided: **worklane adopts pacta's reclaim-fence**, as an explicit,
-    conscious *promise change* (its `ack-on-expired` shifts from `StaleReservation`→redeliver to
-    a direct settle) with **worklane's own conformance updated** to match — not smuggled. Chosen
-    because reclaim-fence is the better design (lazy vs eager invalidation: no redundant redelivery
-    when uncontended, same at-least-once safety), and because it *preserves the single-source
-    drift-prevention* that move 3 (driver override) would forfeit and that move 1 (pacta yields)
-    would abandon while breaking a published contract. **pacta changes nothing** — it keeps its
-    shipped reclaim-fence; the change is worklane's to enact at rebind. The safe-improvement
-    framing holds: end-state identical (the pact settles), just one fewer redundant redelivery, so
-    at-least-once + idempotent consumers are unaffected. (Flip to move 3 only if a worklane user is
-    found to depend on strict `expired-lease ⇒ redelivery` as an observable guarantee — none known.)
-  - **Fence reconciliation — the named go/no-go (now resolved above).**
-    A three-pass audit established this is not a tweak: the fence is *deliberate and
-    conformance-locked on both sides*, and the divergence is **backend-uniform** — worklane
-    fences on lease expiry in postgres (`ack DELETE … leased_until > now`), sqlite (the guarded
-    re-lease `… WHERE receipt = ? AND leased_until > ?`), and redis (lease-expiry scored sets,
-    `ZRANGEBYSCORE … now`) alike; pacta fences on reclaim everywhere. So "faithful second
-    binding" must be stated precisely: the async binding is the faithful async form of **pacta's**
-    contract (reclaim-fenced) — **not** of worklane's. Do not ship or narrate it as "worklane's
-    contract, async." The reconciliation has exactly three moves, each with a real cost:
-    1. **pacta yields** — offer an expiry-fenced settle/release. Cost: abandons a deliberate,
-       shipped, conformance-tested design (breaks `late_fulfill_before_reclaim_succeeds`) — a
-       breaking pacta contract change. Rejected unless reclaim-fence is judged wrong on its own
-       merits (a separate claim-authority case).
-    2. **worklane yields** — adopt reclaim-fence (contract change + worklane conformance update).
-       Arguably better (fewer redundant redeliveries), but a conscious change to worklane's
-       shipped promise; not "承諾不變".
-    3. **worklane driver overrides** `fulfill`/`release` to re-add its expiry check. Faithful to
-       worklane's promise, but then those two ops run worklane's semantics, **forfeiting the
-       single-source drift-prevention** that justified composing on pacta at all.
-    This is the load-bearing decision for the whole "worklane on pacta" thesis. It is worklane's
-    to make (pacta keeps its shipped fence); record the chosen move + its conformance impact
-    before the rebind. **Coverage to pin once the move is chosen** (held now to avoid hardening a
-    contested boundary): pacta's `heartbeat` `now == expiry` boundary (`>=`) is currently untested
-    in `pacta-conformance` — pin it for whichever fence wins. (The release-on-lapsed case is
-    already covered: `released_pact_withheld_until_reclaimable` asserts withholding at `at(3000)`,
-    past the original lease.)
-  - **Async-conformance gate — resolved by `add-async-conformance`.** `pacta-conformance` is not
-    single-source scenario *data* — it is 16 imperative `fn<R: Registry>` bodies bound to the *sync*
-    trait, so a "thin async runner over shared data" was never available. The runner does not
-    duplicate the bodies: it adapts an `AsyncRegistry` into the sync `Registry` via a `block_on` and
-    runs the **existing** bodies verbatim (`run_async`), so there is exactly one scenario set and
-    coverage cannot drift. That resolves the block_on-vs-duplicate fork in favor of block_on: it
-    proves state-machine parity — the same bar the sync suite meets, which exercises no concurrency
-    either. The one property `block_on` cannot reach — the `load`/`cas` interleaving the async
-    decomposition introduces and the sync fat-verb shape lacks — is covered by a separate
-    multi-threaded contention test against the reference backend. The async binding is therefore
-    proven at parity **and** its own race, on pacta's authority, not deferred to worklane's.
+    reclaim-rotation requirement ("settlement rejected **only after** the pact is reclaimed"). The
+    async binding mirrors it faithfully, so async ↔ sync do not drift. Reclaim-fence is the better
+    design here — it salvages genuinely-done work rather than redundantly requeuing it; if it is
+    ever reconsidered, that is a separate claim-authority case, never smuggled into the async work.
+    Coverage to pin: the `heartbeat` `now == expiry` boundary (`>=`) is not yet asserted in
+    `pacta-conformance` (the release-on-lapsed case is already covered by
+    `released_pact_withheld_until_reclaimable`).
+  - **Async-conformance gate — pacta's own.** `pacta-conformance` is not single-source scenario
+    *data* — it is imperative `fn<R: Registry>` bodies bound to the *sync* trait. The async runner
+    does not duplicate them: it adapts an `AsyncRegistry` into the sync `Registry` via a `block_on`
+    and runs the **existing** bodies verbatim (`run_async`), so there is exactly one scenario set
+    and coverage cannot drift. That proves state-machine parity — the same bar the sync suite meets
+    (which exercises no concurrency either). The one property `block_on` cannot reach — the
+    `load`/`cas` interleaving the async decomposition introduces and the sync fat-verb shape lacks
+    — is covered by a separate multi-threaded contention test against the reference backend. The
+    async binding is therefore proven at parity **and** its own race, on pacta's own authority.
   - **Async manifestation obligations — where the teeth are.** The `contract-manifestation` spec
     requires `pacta-contract-async` to document its implementer obligations (`cas` must be atomic;
     `claim` must honor eligibility as a native, full-scan-free selection). Those obligations are
     enforced **behaviorally** by `pacta-conformance` — the concurrent-contention test proves the
     atomic-`cas` fence, and the claim scenarios prove eligibility — not by asserting the doc text is
     present. The doc-text projection is review-enforced, exactly like every other manifestation
-    scenario (the sync facade's included); pacta's prose gate is deliberately forbidden-phrase only,
-    because governance gates architecture, not doc wording. So the manifestation is not "unenforced
-    prose": its substance has a behavioral tooth, and its wording is a review-verified projection —
-    a deliberate split, not a gap.
-  - **Version-cadence isolation — delivered (not just claimed).** The async crates carry
-    their **own version line** (`pacta-contract-async` / `pacta-memory-async` at `0.1.0`),
-    off the workspace lockstep, so the async surface can evolve — even break at `0.x` —
-    without dragging `pacta-contract`. That protects the **published** `pacta-contract`
-    (`0.1.2`): downstream `^0.1` never breaks from a cosmetic lockstep bump. (Earlier the
-    decision *claimed* isolation while the impl was `version.workspace = true` lockstep — a
-    real internal inconsistency, now resolved by delivering per-crate versions rather than
-    softening the rationale.)
+    scenario; pacta's prose gate is deliberately forbidden-phrase only, because governance gates
+    architecture, not doc wording. So the manifestation is not "unenforced prose": its substance
+    has a behavioral tooth, and its wording is a review-verified projection.
+  - **Version-cadence isolation — delivered.** The async crates carry their **own version line**
+    (`pacta-contract-async` / `pacta-memory-async` at `0.1.0`), off the workspace lockstep, so the
+    async surface can evolve — even break at `0.x` — without dragging `pacta-contract`. That
+    protects the **published** `pacta-contract` (`0.1.2`): downstream `^0.1` never breaks from a
+    cosmetic lockstep bump.
   - **Publish cadence — deferred, delivered as `publish = false`.** Both async crates are
-    `publish = false` while the async surface evolves, so finalizing the sync release does
-    **not** publish an evolving async API into crates.io semver. They flip to `publish =
-    true` (and enter `release-packaging`'s set) only when **worklane's review against the
-    current async path** proves them stable enough — force-then-extract. `release-packaging`
-    is unchanged (published set = the original six); no drift.
-  - **Release shape (recorded, for finalization).** The sync side is **additive-only** (the
-    new `lifecycle` module; the frozen five-op surface, `Outcome`, and value types
-    untouched) → **`0.1.3`** (validates the branch), *not* a whole-workspace `0.2.0`. The
-    async crates ride the workspace unpublished at their own `0.1.0`. **Hard gates before
-    the async surface may publish / be called proven:** (1) the **async conformance runner**
-    over single-source scenario data (`pacta-memory-async` runs the same scenarios as the
-    sync suite — without it the sync/async parity is unproven, so async is *not* delivered);
-    (2) the `claim_select` **concurrency/throughput** de-risk, which is worklane-side
-    (a real durable backend under contention) and cannot be discharged from pacta — note it
-    honestly in the release notes as "durable concurrent throughput proven consumer-side."
+    `publish = false` while the async surface stabilizes, so finalizing the sync release does
+    **not** publish an evolving async API into crates.io semver. They flip to `publish = true`
+    (and enter `release-packaging`'s set) on pacta's own bar — when the async surface stabilizes
+    and `pacta-conformance` covers the CAS-contention race — naming no external consumer's review.
+    `release-packaging` is unchanged (published set = the original six); no drift.
+  - **Release shape (recorded, for finalization).** The sync side is **additive-only** (the new
+    `lifecycle` module; the frozen five-op surface, `Outcome`, and value types untouched) →
+    **`0.1.3`** (validates the branch), *not* a whole-workspace `0.2.0`. The async crates ride the
+    workspace unpublished at their own `0.1.0`.
 
 Surface: lifecycle persistence.
 
@@ -347,7 +234,7 @@ proposal.
   owns the policy. Bounded retry for a poison pact stays deferred to the orchestration
   cluster (in-process middleware; cross-process via opaque operational metadata the
   core never interprets).
-- A settled pact need not persist (dogfood finding from a durable consumer, 2026-07-16).
+- A settled pact need not persist (a pacta contract property).
   The `lifecycle::State` enum carries a `Settled` variant and the reference backend keeps
   a settled pact in its store, but a real durable backend can represent "settled" by
   **removing the row** (it becomes trivially not-claimable, and `load` of it returns
