@@ -114,6 +114,23 @@ proposal.
 
 ## Recorded Reconsiderations
 
+- Durable-authority feedback triage — recorded. Porting a durable consumer that retries
+  and defers work surfaced four proposed additions to the registry contract: (1) deferred re-arm/reclaim
+  on release; (2) `breach` carrying a reason plus a retained, inspectable terminal state;
+  (3) a by-id status classification; (4) idempotent pact creation (ingress). Only (1) was
+  accepted into the contract and shipped as `release(retainer, reclaimable_at)` — because
+  honoring a reclaimable instant changes what the *claim authority* does, which a consumer
+  cannot fake. (2)–(4) were **declined from the contract**: recording a breach reason,
+  looking up a pact by id, and creating/persisting a pact are all consumer-backend storage
+  that never changes claim behavior — a durable backend does them over its own tables (as
+  the reference already creates pacts via construction-time `seeded`, not a trait method,
+  and a consumer that breaches already holds the reason to persist itself). (4) also
+  collides with the deliberate "no ingress API is part of the release" scope
+  (`release-packaging`); the retention/inspection halves of (2) and (3) are the already-
+  deferred Tribunal inspection / exhausted-pact review (see Operator Review). The governing
+  line: a registry-contract operation is warranted only when it must change the claim
+  authority's behavior; everything else stays backend/consumer. `Outcome` remains the
+  frozen `Fulfilled | Breached`.
 - Infrastructure-failure handling during execution — resolved. An infrastructure
   failure now leaves the claim unsettled so it lapses and is reclaimed (at-least-once),
   rather than being terminally breached: the kernel fabricates no `Outcome` from an
