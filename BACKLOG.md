@@ -10,8 +10,8 @@ roadmap and does not create implementation commitments. Shipped truth lives in
 - Pacta-native executor, middleware, and driver skeletons are shipped.
 - The sans-I/O lifecycle kernel is shipped: a pure state machine that issues
   directives and absorbs notices, exposing no async and reading no clock.
-- The public surface is frozen for 0.1.0 with a deliberate, role-based
-  exhaustiveness/extensibility stance: the kernel protocol enums
+- The public surface has a deliberate, role-based exhaustiveness/extensibility
+  stance: the kernel protocol enums
   (`Directive`/`Notice`/`StepResult`), the driver `Step`/`DriverError`, and the
   executor `Execution` are `#[non_exhaustive]` (they grow); `Outcome` stays closed
   (a complete settlement binary). The durable records `Pact` and `Claim` are
@@ -57,15 +57,21 @@ publisher concern the thin library legitimately holds: `pacta` is a pure re-expo
 surface, governed to carry no logic, distinct from a composer's batteries-included
 convenience.
 
-## Release Plan
+## Release Packaging
 
-0.1.0 publishes to crates.io. The publishable crates are `pacta`, `pacta-contract`,
+The publishable crates are `pacta`, `pacta-contract`,
 `pacta-executor`, `pacta-driver`, `pacta-memory`, and `pacta-conformance`;
 `pacta-governance` stays unpublished (an internal gate that depends on `tianheng`
 and its `guibiao` coverage core).
 The `pacta` facade is the curated published entrypoint; it was added only once the
 workspace became publishable, because its "publisher owns the entrypoint"
 justification holds only when the workspace actually publishes.
+
+Completed release state lives in workspace metadata, `CHANGELOG.md`, release tags,
+and git rather than in this deferred-decisions file. Release preparation reaches
+`main` through a direct squash-merged pull request, and finalization tags that
+verified commit without a release integration branch or empty release commit; the
+operational procedure lives in `AGENTS.md`.
 
 ## Candidate Pattern Areas
 
@@ -291,14 +297,6 @@ proposal.
   existing active-prose checks, so the crate-specific-readme requirement cannot silently
   regress. Deferred as asymmetric to add for one field alone; recorded for a future
   governance pass. Not decided here.
-- The 0.1.1 version bump and changelog are a deferred, standalone step. Content for 0.1.1
-  (per-crate READMEs and the license section first; code-base fixes to follow) lands on
-  `release/0.1.1` with manifests left at `0.1.0`. The `workspace.package.version` bump, the
-  `[workspace.dependencies]` requirement bump (`0.1.0` → `0.1.1`), and the `CHANGELOG.md`
-  `0.1.1` entry are one purely mechanical release-finalization PR run once all 0.1.1
-  content has landed — keeping every content PR free of release bookkeeping and the
-  changelog a one-shot, honest record of the whole release.
-
 ## Explicitly Deferred
 
 - Workflow DAGs and inter-obligation dependency graphs.
