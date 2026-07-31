@@ -9,7 +9,7 @@ and executable dependency closure for core runtime crates.
 ## Requirements
 
 ### Requirement: Pacta-Native Composition Boundary
-Pacta SHALL define execution composition through Pacta-native middleware and policy vocabulary before exposing adapter-specific APIs.
+Pacta SHALL define execution composition through Pacta-native middleware, policy, and pattern vocabulary before exposing adapter-specific APIs.
 
 #### Scenario: Core composition uses Pacta terms
 - **WHEN** public core runtime APIs refer to execution orchestration
@@ -26,6 +26,10 @@ Pacta SHALL define execution composition through Pacta-native middleware and pol
 #### Scenario: Foreign framework vocabulary stays outside core
 - **WHEN** public core runtime APIs are added or changed
 - **THEN** they do not use Tower, HTTP, request, response, service, or layer vocabulary as the governing public shape
+
+#### Scenario: Patterns attach at extension surfaces
+- **WHEN** public composition APIs introduce a new behavior pattern
+- **THEN** the API identifies whether the behavior belongs to user-defined obligation, execution composition, lifecycle persistence, or integration boundary scope
 
 ### Requirement: Adapter Scope
 Pacta SHALL treat framework adapters as integration scope rather than core runtime scope.

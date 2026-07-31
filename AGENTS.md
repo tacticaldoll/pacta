@@ -1,41 +1,89 @@
 # AGENTS.md
 
-Meta-guideline for any AI coding agent working in this repository. **Read this first.**
+Meta-guideline for AI coding agents working in this repository. Read this first,
+then let `openspec/specs/` and active change specs be the source of durable
+architecture truth.
 
-## The Three Architectural Axioms (Coding Style)
+## Pacta In One Sentence
 
-`Pacta` is a Tower-native, Middleware-driven task runtime. It operates under a strict minimalist philosophy, contrasting heavily with legacy job queues that bloat their storage layers. Before proposing or writing any code, internalize these axioms:
+Pacta is a thin, elegant durable contract fabric and governed pattern framework
+for Rust user-defined obligations.
 
-1. **Zero-Dependency Contract**: The `pacta-contract` crate is the sole source of truth. It defines the `Registry` trait and the `Pact` envelope. It must NEVER depend on business logic crates (e.g., `tokio`, `tower`, routing logic). It is purely a data and state interface.
-2. **Pure State Machine (Registry is Lifecycle)**: The `Registry` manages only four actions: `claim`, `fulfill`, `breach`, and `heartbeat`. Concepts like retry attempts, visibility delay, topic routing, cron scheduling, and dead-letter clauses are strictly forbidden from the `Registry` trait and the `Pact` struct. The Registry does not do business logic.
-3. **Execution is Composition**: All execution orchestration must be implemented as `&self` Middleware layers. Retries, timeouts, rate limiting, and observability belong in the Handler stack, entirely decoupled from the Registry. 
+This repository is intentionally narrow. Pacta is not a broker, workflow engine,
+or queue feature platform. Framework integrations are boundary patterns, not the
+identity of the core.
+
+## Architectural Axioms
+
+Before proposing or writing code, protect these axioms:
+
+1. **Lifecycle kernel stays thin**: `pacta-contract` owns the durable pact
+   envelope and `Registry` lifecycle contract. It does not own orchestration,
+   scheduling, routing, adapters, or backend business behavior.
+2. **Execution grows by composition**: execution behavior belongs around
+   `Executor` through Pacta-native middleware, policies, and future governed
+   patterns.
+3. **Adapters stay outside the core**: integrations with external frameworks,
+   transports, or storage systems must not define first-layer Pacta APIs.
+4. **Vocabulary is governance**: names such as `Pact`, `Docket`, `Clause`,
+   `Brief`, `Registry`, `Claim`, `Retainer`, `Fulfill`, `Breach`, and
+   `Tribunal` protect the contract/arbitration worldview.
+
+## Document Authority
+
+- `openspec/specs/` is shipped architecture truth.
+- `openspec/changes/` contains active proposed truth until it is synced.
+- `PROJECT.md` states product vision, positioning, and non-goals.
+- `docs/blueprint.md` names extension surfaces and boundary rules.
+- `BACKLOG.md` records deferred decisions and candidate patterns, not mandatory
+  phases.
+- `AGENTS.md` is operating protocol for agents and contributors.
+
+If these documents conflict, fix the conflict through an OpenSpec change before
+implementing feature code.
 
 ## Adversarial Review Stance
 
-When reading proposals or reviewing code, adopt an adversarial stance. You must actively challenge the design:
-- **Propose Phase**: Does this proposal leak business logic into the Registry? Could this be solved purely with a Middleware layer instead? If a feature violates the three axioms, it must be rejected or redesigned as a Middleware.
-- **Apply Phase**: Does the implementation bloat the core schema? Have we maintained absolute zero-dependency isolation in the contract? Assume the code is bloating the system until proven otherwise.
+When reading proposals or reviewing code, actively challenge the design:
+
+- **Propose phase**: Does the change make Pacta heavier than the thin kernel
+  requires? Can it be expressed as a governed pattern on an extension surface?
+  Does it treat a benchmark or adapter as core identity?
+- **Apply phase**: Does the implementation leak orchestration, integration, or
+  product prose drift into core crates or active guidance? Does Tianheng still
+  bite the boundary that the prose claims?
+
+Reject or redesign changes that pull Pacta toward broad queue-runtime behavior.
 
 ## OpenSpec Workflow
 
-This repository uses OpenSpec. The source of truth lives in `openspec/specs/`, while active changes live in `openspec/changes/`.
+This repository uses OpenSpec. The lifecycle is:
 
-Follow this exact lifecycle:
 ```text
 explore -> propose -> apply -> sync -> archive
 ```
-1. **Explore**: think and investigate. Do not write feature code outside of a change.
-2. **Propose**: create a change with `proposal.md`, `design.md`, `tasks.md`, and delta specs. (Subject to Adversarial Review).
-3. **Apply**: implement tasks one at a time, checking each off in `tasks.md` only after verification. (Subject to Adversarial Review).
-4. **Sync**: merge verified delta specs back into `openspec/specs/`.
-5. **Archive**: move the completed change to `openspec/changes/archive/YYYY-MM-DD-<name>/`.
 
-## Commits (Strict Discipline)
+1. **Explore**: investigate and shape intent. Do not write feature code outside
+   a change.
+2. **Propose**: create `proposal.md`, `design.md`, `tasks.md`, and delta specs.
+   Commit as `docs(<change>): propose <summary>`.
+3. **Apply**: implement against the active delta specs. Check off tasks only
+   after verification. Commit coherent compiling milestones as `feat(...)` or
+   `fix(...)`.
+4. **Sync**: merge verified delta specs into `openspec/specs/`. Commit as
+   `docs(specs): sync <change>`.
+5. **Archive**: archive the completed change. Commit as
+   `chore(openspec): archive <change>`.
 
-Use Conventional Commits: `type(scope): summary`
-Use lowercase imperative mood and keep the summary at 72 characters or fewer.
-Common types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `build`,
-`ci`.
+## Commits
+
+Use Conventional Commits: `type(scope): summary`.
+
+- Use lowercase imperative mood.
+- Keep the subject at 72 characters or fewer.
+- Write commit messages in English.
+- Do not include AI signatures, tool signatures, PR numbers, or issue numbers.
+- `release: X.Y.Z` is reserved for release commits on `main`.
 
 ### Branch Commits
 
@@ -89,21 +137,10 @@ Common types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `build`,
 - Push the annotated tag without creating another commit. A release branch and
   an empty release commit are not part of the release flow.
 
-**Commit Flow (must match OpenSpec lifecycle):**
-- **Propose**: `docs(<change>): propose <summary>`
-- **Apply**: `feat(<change>): <summary>` or `fix(<change>): <summary>`. Implement against the change's delta specs. Commit per coherent compiling milestone, NOT per checkbox.
-- **Sync**: `docs(specs): sync <change>`
-- **Archive**: `chore(openspec): archive <change>`
-
-**Absolute Rules:**
-- Write commit messages in English.
-- No AI or tool signatures: No `Co-Authored-By`, no "Generated with". 
-- No PR or issue numbers (`#123`) in commit messages. The history must read as a human-authored engineering record.
-- `release: X.Y.Z` is a reserved commit subject used only for release commits on `main`.
-
 ## Definition Of Done
 
-Run these from the workspace root before checking off a task, syncing specs, or archiving a change:
+Run these from the workspace root before checking off implementation tasks,
+syncing specs, or archiving a change:
 
 ```bash
 cargo build --workspace

@@ -1,50 +1,76 @@
 # Project Contract
 
-## Purpose
+## Vision
 
-Pacta is a Pacta-native, middleware-oriented contract runtime for Rust. It is
-designed to act as an ultra-minimalist durable pact system that delegates all
-execution orchestration (retries, timeouts, rate limiting, routing) to
-Pacta-native middleware and policy composition.
+Pacta is a thin, elegant durable contract fabric and governed pattern framework
+for Rust user-defined obligations.
 
-Tower may be supported through adapter-owned crates, but Tower vocabulary must
-not define Pacta's core public API.
+It exists to fill a narrow gap in the Rust ecosystem: the thinnest useful core
+for durable execution without forcing users into a heavy broker, broad workflow
+engine, or framework-first runtime. Pacta keeps the durable lifecycle small and
+lets users compose their own obligation semantics around it.
 
-By stripping business logic from the registry layer, Pacta enables backend
-substitutability, massive concurrency through executor implementations, and
-out-of-the-box event replay capabilities.
+## Product Positioning
+
+Pacta is for systems that need durable user-defined obligations with clear
+lifecycle authority:
+
+```text
+Signal -> Pact -> Claim -> Execution -> Settlement
+```
+
+The product promise is not "more queue features". It is a clean place to attach
+patterns:
+
+- user-defined obligation semantics
+- Pacta-native execution composition
+- lifecycle persistence through registries
+- adapter-owned integration boundaries
 
 ## Core Contract
 
 The behavior that must be protected at all costs:
-- **Registry Purity**: The `Registry` is a pure lifecycle state machine
-  (`claim`, `fulfill`, `breach`, `heartbeat`). It never computes exponential
-  backoff, never manages visibility delays, and never inspects clauses.
-- **Executor Isolation**: Execution is isolated into Pacta-native middleware
-  stacks.
 
-## Terminology
+- **Thin lifecycle kernel**: `pacta-contract` owns durable pact data and
+  `Registry` lifecycle authority. It does not own retries, timeouts, routing,
+  scheduling, transport adapters, or backend-specific business behavior.
+- **Composition over accumulation**: execution behavior grows through
+  Pacta-native middleware, policies, and future governed design patterns.
+- **Adapter boundary**: framework, transport, and storage integrations remain
+  outside the core and cannot define first-layer Pacta APIs.
+- **Governance with teeth**: Tianheng and project specs enforce the boundaries
+  that prose claims.
 
-- **Signal**: A short-lived external trigger (e.g., an HTTP request or a Cron tick).
-- **Pact**: A durable command or contract, generated from a Signal, ready to be executed.
-- **Docket**: The public grouping from which Pacts are selected.
-- **Clause**: The business data carried by a Pact.
-- **Brief**: Non-business operational context attached to a Pact.
-- **Registry**: The pure lifecycle state machine tracking Pacts and Dockets.
-- **Executor**: The public role responsible for executing a claimed Pact through Pacta-native middleware.
-- **Middleware**: Pacta-native execution composition around an executor, acting as a decorator.
-- **Policy**: A minimal value naming an orchestration intent (like retry or timeout) evaluated by middleware.
-- **Claim**: A Pact plus the authority needed to process it.
-- **Retainer**: The opaque token proving authority to fulfill or breach a Claim.
-- **Tribunal**: Terminal review for exhausted Pacts that should no longer be handled automatically.
+## Elegance
 
-See `docs/domain-language.md` for the canonical glossary and legacy mapping.
+Elegance in Pacta is technical restraint:
 
-## Change Prioritization
+- fewer lifecycle states
+- precise contract/arbitration vocabulary
+- user-owned obligations
+- small composable interfaces
+- executable governance against architectural drift
 
-When comparing possible changes, prefer the one that protects the core contract earliest. Future phases are defined in `BACKLOG.md`, but the prioritization rule is always:
+The naming universe is part of that restraint. `Pact`, `Docket`, `Clause`,
+`Brief`, `Registry`, `Claim`, `Retainer`, `Fulfill`, `Breach`, and `Tribunal`
+are not decorative terms; they keep the system from sliding back into generic
+queue-runtime thinking.
 
-1. Correctness, data integrity, and strict adherence to the Three Axioms.
-2. Specified feature completeness for Pacta-native middleware and policies.
-3. Operator observability (tracing, tribunal review).
-4. Scale-out and new `Registry` backend integrations.
+## Non-Goals
+
+Pacta core is not:
+
+- a message broker
+- a general job queue feature platform
+- a workflow engine
+- a scheduler
+- a transport framework
+- a backend abstraction that owns business policy
+
+## References
+
+- Canonical shipped requirements: `openspec/specs/`
+- Active proposed requirements: `openspec/changes/`
+- Architecture blueprint: `docs/blueprint.md`
+- Domain language: `docs/domain-language.md`
+- Deferred decisions: `BACKLOG.md`
