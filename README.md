@@ -16,9 +16,9 @@ patterns.
 `Signal -> Pact` is user-provided ingress: you turn your own events into pacts.
 Pacta ships the lifecycle from `Pact` onward, not an ingress API.
 
-## Status (0.1.0)
+## Status (0.1.1)
 
-0.1.0 is the thin lifecycle foundation, not a complete durable runtime. It ships:
+0.1.1 is the thin lifecycle foundation, not a complete durable runtime. It ships:
 
 - a curated **facade** (`pacta`) — the recommended single entrypoint you depend on;
 - the lifecycle **contract** (`Registry`) and a sans-I/O lifecycle **kernel**;
@@ -31,7 +31,7 @@ Pacta ships the lifecycle from `Pact` onward, not an ingress API.
 
 Durable/persistent backends deliberately live **outside** this workspace and prove
 themselves against the conformance suite. No ingress API, framework adapters, or
-retry/backoff/timeout orchestration ship in 0.1.0 — see `CHANGELOG.md`.
+retry/backoff/timeout orchestration ship in 0.1.1 — see `CHANGELOG.md`.
 
 ## Why Pacta
 

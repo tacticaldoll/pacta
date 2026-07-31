@@ -11,20 +11,20 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/tacticaldoll/pacta"
-keywords = ["durable", "lifecycle", "task", "contract", "runtime"]
+keywords = ["durable", "lifecycle", "sans-io", "state-machine", "contract"]
 categories = ["asynchronous", "concurrency"]
 publish = true
 
 [workspace.dependencies]
-pacta-conformance = { path = "crates/pacta-conformance", version = "0.1.0" }
-pacta-contract = { path = "crates/pacta-contract", version = "0.1.0" }
-pacta-driver = { path = "crates/pacta-driver", version = "0.1.0" }
-pacta-executor = { path = "crates/pacta-executor", version = "0.1.0" }
+pacta-conformance = { path = "crates/pacta-conformance", version = "0.1.1" }
+pacta-contract = { path = "crates/pacta-contract", version = "0.1.1" }
+pacta-driver = { path = "crates/pacta-driver", version = "0.1.1" }
+pacta-executor = { path = "crates/pacta-executor", version = "0.1.1" }
 serde = { version = "1.0", features = ["derive"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }
 tianheng = "0.1.9"
