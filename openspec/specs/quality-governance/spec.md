@@ -32,17 +32,25 @@ Pacta SHALL run its Tianheng architecture constitution as a CI reaction.
 - **THEN** the governance reaction fails
 
 ### Requirement: Kernel Async-Exposure Reaction
-Pacta SHALL run an executable semantic reaction that keeps the lifecycle kernel
-free of exposed async throughout the kernel and its submodules, so the kernel's
-runtime-agnosticism cannot silently drift — not at its own seam only.
+Pacta SHALL run an executable semantic reaction that keeps its sans-I/O kernels free of exposed
+async — both the **step-driver kernel** (`crate::kernel`) and the **colorless lifecycle-state
+kernel** (`crate::lifecycle`), each throughout its own submodules — so their runtime-agnosticism
+cannot silently drift, not at one seam only. The lifecycle kernel is the single source that both
+the synchronous and asynchronous `Registry` bindings compose over; an exposed `async fn` there
+would colour that shared source and let the two bindings drift, so it is guarded by its own
+boundary, distinct from the step-driver kernel's.
 
-#### Scenario: Kernel async fn is rejected
-- **WHEN** the lifecycle kernel's public API exposes an `async fn`
+#### Scenario: Step-driver kernel async fn is rejected
+- **WHEN** the step-driver kernel's (`crate::kernel`) public API exposes an `async fn`
 - **THEN** the governance reaction fails via the hunyi semantic dimension
 
+#### Scenario: Lifecycle kernel async fn is rejected
+- **WHEN** the colorless lifecycle-state kernel's (`crate::lifecycle`) public API exposes an `async fn`
+- **THEN** the governance reaction fails, because the lifecycle kernel must stay colorless so the sync and async bindings cannot drift
+
 #### Scenario: A submodule async fn is rejected
-- **WHEN** a submodule under the lifecycle kernel exposes an `async fn`
-- **THEN** the governance reaction fails, because the async-exposure boundary descends the kernel subtree
+- **WHEN** a submodule under either kernel exposes an `async fn`
+- **THEN** the governance reaction fails, because each async-exposure boundary descends its kernel subtree
 
 #### Scenario: Async-exposure reaction runs in CI
 - **WHEN** a push or pull request runs CI
