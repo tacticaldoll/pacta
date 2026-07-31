@@ -84,3 +84,43 @@ that are not part of the release.
 - **WHEN** the README depicts the lifecycle flow
 - **THEN** it does not present a `Signal`-to-`Pact` ingress as a shipped public API, because no ingress API is part of the release
 
+### Requirement: Active Release Planning Reflects Repository Truth
+Pacta SHALL keep active release planning consistent with the versions and releases
+recorded by workspace metadata, the changelog, tags, and git. A release already
+recorded by those sources SHALL NOT remain described as future or deferred work,
+and `BACKLOG.md` SHALL remain a record of genuinely deferred decisions and
+candidate patterns rather than a second release ledger.
+
+#### Scenario: A completed release is not still deferred
+- **WHEN** workspace metadata, the changelog, and a release tag record a release as
+  completed
+- **THEN** active release planning does not describe that release's preparation,
+  version bump, changelog entry, or publication as future or deferred work
+
+#### Scenario: Historical release provenance stays single-sourced
+- **WHEN** completed release rationale or contents need to be recovered
+- **THEN** contributors use the changelog and git provenance rather than retaining
+  a duplicate completed-release plan in `BACKLOG.md`
+
+### Requirement: Releases Flow Directly Through Main
+Every content-changing release preparation SHALL reach `main` through a pull
+request opened directly against `main` and squash-merged with its approved title
+and durable rationale. Pacta SHALL NOT use a release integration branch or an empty
+release commit; release finalization SHALL annotate the verified release-preparation
+commit and push that tag without another content-changing commit.
+
+#### Scenario: Release preparation targets main
+- **WHEN** version metadata, the changelog, or other release content changes
+- **THEN** the change is reviewed in a pull request opened directly against `main`
+  and reaches `main` through a squash merge
+
+#### Scenario: No release integration branch is introduced
+- **WHEN** release content is prepared and finalized
+- **THEN** no release integration branch sits between the content change and
+  `main`, and no empty release commit is created
+
+#### Scenario: Finalization tags the verified preparation commit
+- **WHEN** the release-preparation squash commit on `main` passes the complete
+  Definition of Done
+- **THEN** release finalization creates the annotated version tag directly on that
+  verified commit and pushes the tag without another commit
