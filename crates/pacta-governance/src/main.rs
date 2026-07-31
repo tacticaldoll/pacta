@@ -13,7 +13,7 @@ use tianheng::prelude::*;
 const CONTRACT_REASON: &str = "pacta-contract is the isolated core contract. It may depend only on serde and uuid, and never on another workspace crate or runtime framework.";
 const EXECUTOR_REASON: &str = "pacta-executor owns the Pacta-native execution vocabulary. It may depend only on pacta-contract, never on drivers, adapters, backends, or external frameworks.";
 const DRIVER_REASON: &str = "pacta-driver is mechanical runtime glue. It may depend only on pacta-contract and pacta-executor, never on adapters, backends, or external frameworks.";
-const GOVERNANCE_REASON: &str = "the governance gate must stay independent of the graph it judges: depend only on tianheng, never on a workspace crate.";
+const GOVERNANCE_REASON: &str = "the governance gate must stay independent of the workspace graph it judges: it may depend only on governance-family tooling (tianheng and its guibiao coverage core), never on a workspace crate under judgment.";
 const KERNEL_ASYNC_REASON: &str = "the sans-I/O lifecycle kernel must stay runtime-agnostic: its public API must never expose an async fn, so no runtime shape leaks into the contract.";
 const MEMORY_REASON: &str = "pacta-memory is a registry backend outside the core. It may depend only on pacta-contract and uuid, never on drivers, executors, or other backends.";
 const CONFORMANCE_REASON: &str = "pacta-conformance is a backend-agnostic test suite. It may depend only on pacta-contract and uuid, never on a specific backend.";
@@ -118,7 +118,7 @@ fn constitution() -> Constitution {
         )
         .boundary(
             CrateBoundary::crate_("pacta-governance")
-                .restrict_dependencies_to(["tianheng"])
+                .restrict_dependencies_to(["tianheng", "guibiao"])
                 .because(GOVERNANCE_REASON),
         )
         .boundary(
@@ -148,6 +148,7 @@ fn constitution() -> Constitution {
                 .module("crate")
                 .must_not_call_inline("uuid")
                 .ending_with(["now_v7", "now_v1"])
+                .strict_external()
                 .because(AMBIENT_TIME_UUID_REASON),
         )
         .async_exposure_boundary(
@@ -483,54 +484,23 @@ pub use pacta_driver::{
     }
 
     #[test]
-    fn every_workspace_crate_has_a_boundary() {
-        // Tianheng coverage is advisory and never fails CI, so assert completeness here.
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let manifest =
-            fs::read_to_string(root.join("Cargo.toml")).expect("root manifest should be readable");
-        let members = workspace_members(&manifest);
-        assert!(!members.is_empty(), "expected to parse workspace members");
-
-        let governed: Vec<String> = constitution()
-            .static_boundaries()
-            .boundaries()
-            .iter()
-            .filter_map(|boundary| match boundary {
-                tianheng::Boundary::Crate(crate_boundary) => {
-                    Some(crate_boundary.target().package.clone())
-                }
-                _ => None,
-            })
-            .collect();
-
-        let ungoverned: Vec<&String> = members
-            .iter()
-            .filter(|member| !governed.contains(member))
-            .collect();
+    fn every_workspace_crate_is_covered() {
+        // Tianheng coverage is advisory and never fails CI, so assert completeness
+        // here through the native projection. `check_and_cover` takes the static
+        // (guibiao) constitution and reads real `cargo metadata`.
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.toml");
+        let (_outcome, coverage) =
+            guibiao::check_and_cover(constitution().static_boundaries(), &manifest);
+        let coverage = coverage.expect("workspace metadata should be readable in-repo");
         assert!(
-            ungoverned.is_empty(),
-            "every workspace crate must have a dependency boundary; ungoverned: {ungoverned:?}"
+            coverage.total > 0,
+            "coverage read no crates — the gate would pass vacuously"
         );
-    }
-
-    fn workspace_members(manifest: &str) -> Vec<String> {
-        let start = manifest
-            .find("members = [")
-            .expect("root manifest should declare workspace members");
-        let rest = &manifest[start..];
-        let end = rest.find(']').expect("members array should be closed");
-
-        rest[..end]
-            .lines()
-            .filter_map(|line| {
-                let entry = line.trim().trim_end_matches(',').trim_matches('"');
-                if entry.contains("crates/") {
-                    entry.rsplit('/').next().map(str::to_owned)
-                } else {
-                    None
-                }
-            })
-            .collect()
+        assert!(
+            coverage.uncovered.is_empty(),
+            "every workspace crate must have a dependency boundary; ungoverned: {:?}",
+            coverage.uncovered
+        );
     }
 
     #[test]
@@ -575,6 +545,88 @@ pub use pacta_driver::{
         assert!(violations.is_empty());
     }
 
+    /// Build a minimal two-crate workspace (`pacta-contract` + `pacta`, the two
+    /// crates the semantic boundaries target) and run the whole semantic bundle
+    /// against it. Both crates are always present: a missing target crate or module
+    /// makes `check_all` return `Outcome::ConstitutionError`, not a silent skip, so a
+    /// firing fixture must differ from a clean one only in the leak it commits.
+    fn semantic_reaction_outcome(
+        name: &str,
+        contract_source: &str,
+        facade_dependencies: &str,
+        facade_source: &str,
+    ) -> Outcome {
+        let workspace = TempWorkspace::new(name);
+        workspace.write_package_with_source("pacta-contract", "", contract_source);
+        workspace.write_package_with_source("pacta", facade_dependencies, facade_source);
+        workspace.write_root_manifest_members(&["pacta", "pacta-contract"]);
+
+        tianheng::check_all(
+            constitution().semantic_boundaries(),
+            &workspace.path.join("Cargo.toml"),
+        )
+    }
+
+    #[test]
+    fn kernel_async_exposure_reaction_fires() {
+        let outcome = semantic_reaction_outcome(
+            "pacta-governance-kernel-async-leak",
+            "pub mod kernel {\n    pub async fn leak() {}\n}\n",
+            "",
+            "",
+        );
+
+        let Outcome::Violations(report) = outcome else {
+            panic!("expected a kernel async-exposure violation, got {outcome:?}");
+        };
+        assert!(
+            report.violations.iter().any(|violation| {
+                let id = violation.id();
+                id.target == "crate::kernel" && id.rule == "must not expose async fn"
+            }),
+            "expected the kernel async-exposure boundary to fire: {report:?}"
+        );
+    }
+
+    #[test]
+    fn facade_kernel_reexport_reaction_fires() {
+        let outcome = semantic_reaction_outcome(
+            "pacta-governance-facade-kernel-leak",
+            "pub mod kernel {\n    pub struct Leak;\n}\n",
+            "[dependencies]\npacta-contract = { path = \"../pacta-contract\" }\n",
+            "pub use pacta_contract::kernel::Leak;\n",
+        );
+
+        let Outcome::Violations(report) = outcome else {
+            panic!("expected a facade kernel-exclusion violation, got {outcome:?}");
+        };
+        assert!(
+            report.violations.iter().any(|violation| {
+                let id = violation.id();
+                id.target == "crate" && id.rule == "must not expose"
+            }),
+            "expected the facade kernel-exclusion boundary to fire: {report:?}"
+        );
+    }
+
+    #[test]
+    fn semantic_reactions_stay_clean_without_a_leak() {
+        // Precision: the same two-crate shape without either leak must be clean, so
+        // the firing tests prove a reacting boundary, not one that always fires.
+        let outcome = semantic_reaction_outcome(
+            "pacta-governance-semantic-clean",
+            "pub mod kernel {\n    pub struct Item;\n}\n",
+            "",
+            "",
+        );
+
+        assert_eq!(
+            outcome,
+            Outcome::Clean,
+            "a workspace with no kernel leak must raise no semantic violation"
+        );
+    }
+
     struct TempWorkspace {
         path: PathBuf,
     }
@@ -590,27 +642,44 @@ pub use pacta_driver::{
         }
 
         fn write_root_manifest(&self) {
+            self.write_root_manifest_members(&[
+                "pacta",
+                "pacta-conformance",
+                "pacta-contract",
+                "pacta-driver",
+                "pacta-executor",
+                "pacta-governance",
+                "pacta-memory",
+                "tower",
+            ]);
+        }
+
+        fn write_root_manifest_members(&self, members: &[&str]) {
+            let entries = members
+                .iter()
+                .map(|member| format!("    \"{member}\","))
+                .collect::<Vec<_>>()
+                .join("\n");
             fs::write(
                 self.path.join("Cargo.toml"),
-                r#"
+                format!(
+                    r#"
 [workspace]
 resolver = "2"
 members = [
-    "pacta",
-    "pacta-conformance",
-    "pacta-contract",
-    "pacta-driver",
-    "pacta-executor",
-    "pacta-governance",
-    "pacta-memory",
-    "tower",
+{entries}
 ]
-"#,
+"#
+                ),
             )
             .expect("workspace manifest should be writable");
         }
 
         fn write_package(&self, name: &str, dependencies: &str) {
+            self.write_package_with_source(name, dependencies, "");
+        }
+
+        fn write_package_with_source(&self, name: &str, dependencies: &str, source: &str) {
             let package = self.path.join(name);
             fs::create_dir_all(package.join("src")).expect("package source dir should be writable");
             fs::write(
@@ -626,7 +695,8 @@ edition = "2024"
                 ),
             )
             .expect("package manifest should be writable");
-            fs::write(package.join("src/lib.rs"), "").expect("package source should be writable");
+            fs::write(package.join("src/lib.rs"), source)
+                .expect("package source should be writable");
         }
     }
 
