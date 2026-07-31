@@ -5,6 +5,8 @@
 
 use pacta_contract::Pact;
 
+pub use pacta_contract::{Outcome, Settlement};
+
 /// A single attempt to fulfill a claimed pact.
 #[derive(Debug, Clone)]
 pub struct Execution {
@@ -19,18 +21,6 @@ impl Execution {
         Self { pact }
     }
 }
-
-/// Result reported by an executor after handling an execution.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Outcome {
-    /// The pact was fulfilled successfully.
-    Fulfilled,
-    /// The pact could not be fulfilled and must be breached.
-    Breached,
-}
-
-/// Lifecycle settlement requested by execution.
-pub type Settlement = Outcome;
 
 /// Public role responsible for executing claimed pacts through middleware.
 pub trait Executor {
