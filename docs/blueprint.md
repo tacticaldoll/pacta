@@ -73,4 +73,4 @@ points. They help Pacta see the ecosystem gap; they do not define Pacta's core.
 
 Examples in this blueprint are possible directions, not required phases. A
 candidate becomes real only through an OpenSpec change, adversarial review,
-implementation, verification, sync, and archive.
+implementation, verification, and sync into `openspec/specs/`.

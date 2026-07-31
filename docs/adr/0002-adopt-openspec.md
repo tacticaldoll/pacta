@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Accepted. The archival clause is superseded by
+[ADR 0004](0004-retire-openspec-change-archive.md): changes are synced and their
+directories removed rather than archived.
 
 ## Context
 

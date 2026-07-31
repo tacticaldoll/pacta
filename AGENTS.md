@@ -60,7 +60,7 @@ Reject or redesign changes that pull Pacta toward broad queue-runtime behavior.
 This repository uses OpenSpec. The lifecycle is:
 
 ```text
-explore -> propose -> apply -> sync -> archive
+explore -> propose -> apply -> sync
 ```
 
 1. **Explore**: investigate and shape intent. Do not write feature code outside
@@ -70,10 +70,10 @@ explore -> propose -> apply -> sync -> archive
 3. **Apply**: implement against the active delta specs. Check off tasks only
    after verification. Commit coherent compiling milestones as `feat(...)` or
    `fix(...)`.
-4. **Sync**: merge verified delta specs into `openspec/specs/`. Commit as
-   `docs(specs): sync <change>`.
-5. **Archive**: archive the completed change. Commit as
-   `chore(openspec): archive <change>`.
+4. **Sync**: merge verified delta specs into `openspec/specs/` (agent-driven —
+   this CLI has no `sync` command), then remove the completed change directory; its
+   content now lives in `openspec/specs/` and git history. There is no archive.
+   Commit as `docs(specs): sync <change>`.
 
 ## Commits
 
