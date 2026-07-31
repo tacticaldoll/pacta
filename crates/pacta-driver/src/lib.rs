@@ -3,9 +3,22 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use pacta_contract::kernel::{Directive, Kernel, Notice, StepResult};
-use pacta_contract::{Outcome, Registry};
+use pacta_contract::{Outcome, Registry, Timestamp};
 use pacta_executor::{Execution, Executor};
+
+/// Read the current wall-clock time as a [`Timestamp`] to inject into
+/// time-dependent registry operations. Reading the clock is a runtime concern, so
+/// it lives here and never in the core contract.
+fn current_time() -> Timestamp {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0);
+    Timestamp::from_millis(millis)
+}
 
 /// One mechanical driver step result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,6 +80,7 @@ where
     /// back, deciding no lifecycle outcome itself.
     pub fn step(&mut self) -> Result<Step, DriverError<R::Error, E::Error>> {
         let dockets: Vec<&str> = self.dockets.iter().map(String::as_str).collect();
+        let now = current_time();
         let mut kernel = Kernel::new();
         let mut pending_executor_error: Option<E::Error> = None;
 
@@ -90,7 +104,7 @@ where
                 Directive::Claim => {
                     let claim = self
                         .registry
-                        .claim(&dockets)
+                        .claim(&dockets, now)
                         .map_err(DriverError::Registry)?;
                     kernel.on_event(Notice::Claimed(claim));
                 }
@@ -124,7 +138,7 @@ where
 mod tests {
     use std::sync::Mutex;
 
-    use pacta_contract::{Claim, Pact, Retainer};
+    use pacta_contract::{Claim, Pact, Retainer, Timestamp};
     use uuid::Uuid;
 
     use super::*;
@@ -156,7 +170,7 @@ mod tests {
     impl Registry for TestRegistry {
         type Error = ();
 
-        fn claim(&self, dockets: &[&str]) -> Result<Option<Claim>, Self::Error> {
+        fn claim(&self, dockets: &[&str], _now: Timestamp) -> Result<Option<Claim>, Self::Error> {
             self.state
                 .lock()
                 .expect("registry state should not be poisoned")
@@ -170,7 +184,7 @@ mod tests {
                 .take())
         }
 
-        fn heartbeat(&self, _retainer: &Retainer) -> Result<(), Self::Error> {
+        fn heartbeat(&self, _retainer: &Retainer, _now: Timestamp) -> Result<(), Self::Error> {
             Ok(())
         }
 
@@ -214,6 +228,7 @@ mod tests {
                 clause: Vec::new(),
             },
             retainer: Retainer::new(Uuid::new_v4()),
+            lease_expiry: Timestamp::from_millis(0),
         }
     }
 

@@ -15,8 +15,25 @@ const EXECUTOR_REASON: &str = "pacta-executor owns the Pacta-native execution vo
 const DRIVER_REASON: &str = "pacta-driver is mechanical runtime glue. It may depend only on pacta-contract and pacta-executor, never on adapters, backends, or external frameworks.";
 const GOVERNANCE_REASON: &str = "the governance gate must stay independent of the graph it judges: depend only on tianheng, never on a workspace crate.";
 const KERNEL_ASYNC_REASON: &str = "the sans-I/O lifecycle kernel must stay runtime-agnostic: its public API must never expose an async fn, so no runtime shape leaks into the contract.";
+const MEMORY_REASON: &str = "pacta-memory is a registry backend outside the core. It may depend only on pacta-contract and uuid, never on drivers, executors, or other backends.";
+const CONFORMANCE_REASON: &str = "pacta-conformance is a backend-agnostic test suite. It may depend only on pacta-contract and uuid, never on a specific backend.";
 const PROSE_REASON: &str =
     "active prose must not reintroduce stale architecture-defining vocabulary";
+const AMBIENT_TIME_REASON: &str =
+    "the core contract must read no ambient clock; time is injected at the Registry seam";
+
+/// Current-time constructors forbidden inside the core contract. `pacta-contract`
+/// is allowed `uuid`, so the scan must catch uuid's clock constructors too, not
+/// only `std::time`; a `::now(`-only pattern would miss `now_v7(`.
+const AMBIENT_TIME_MARKERS: &[&str] = &[
+    "SystemTime::now",
+    "Instant::now",
+    "Uuid::now_v7",
+    "Uuid::now_v1",
+];
+
+/// The core source tree the ambient-time scan guards, relative to the workspace root.
+const CORE_SOURCE_DIR: &str = "crates/pacta-contract/src";
 
 const ACTIVE_PROSE_FILES: &[&str] = &[
     "AGENTS.md",
@@ -107,6 +124,16 @@ fn constitution() -> Constitution {
                 .restrict_dependencies_to(["tianheng"])
                 .because(GOVERNANCE_REASON),
         )
+        .boundary(
+            CrateBoundary::crate_("pacta-memory")
+                .restrict_dependencies_to(["pacta-contract", "uuid"])
+                .because(MEMORY_REASON),
+        )
+        .boundary(
+            CrateBoundary::crate_("pacta-conformance")
+                .restrict_dependencies_to(["pacta-contract", "uuid"])
+                .because(CONFORMANCE_REASON),
+        )
         .async_exposure_boundary(
             AsyncExposureBoundary::in_crate("pacta-contract")
                 .module("crate::kernel")
@@ -131,6 +158,17 @@ fn main() -> ExitCode {
                 eprintln!(
                     "{}:{}: `{}` - {}",
                     violation.path, violation.line, violation.phrase, violation.reason
+                );
+            }
+            return ExitCode::from(1);
+        }
+
+        if let Err(violations) = check_no_ambient_time(&root) {
+            eprintln!("pacta ambient-time governance failed: {AMBIENT_TIME_REASON}");
+            for violation in violations {
+                eprintln!(
+                    "{}:{}: `{}`",
+                    violation.path, violation.line, violation.marker
                 );
             }
             return ExitCode::from(1);
@@ -207,6 +245,72 @@ fn check_prose_content(path: &str, content: &str) -> Vec<ProseViolation> {
     violations
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct SourceViolation {
+    path: String,
+    line: usize,
+    marker: &'static str,
+}
+
+fn check_no_ambient_time(root: &Path) -> Result<(), Vec<SourceViolation>> {
+    let mut violations = Vec::new();
+
+    for file in collect_rs_files(&root.join(CORE_SOURCE_DIR)) {
+        let Ok(content) = fs::read_to_string(&file) else {
+            continue;
+        };
+        let relative = file
+            .strip_prefix(root)
+            .unwrap_or(&file)
+            .to_string_lossy()
+            .into_owned();
+        violations.extend(check_source_content(&relative, &content));
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(violations)
+    }
+}
+
+fn check_source_content(path: &str, content: &str) -> Vec<SourceViolation> {
+    let mut violations = Vec::new();
+
+    for (index, line) in content.lines().enumerate() {
+        for marker in AMBIENT_TIME_MARKERS {
+            if line.contains(*marker) {
+                violations.push(SourceViolation {
+                    path: path.to_owned(),
+                    line: index + 1,
+                    marker,
+                });
+            }
+        }
+    }
+
+    violations
+}
+
+fn collect_rs_files(dir: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+
+    let Ok(entries) = fs::read_dir(dir) else {
+        return files;
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            files.extend(collect_rs_files(&path));
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            files.push(path);
+        }
+    }
+
+    files
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,6 +352,8 @@ pacta-executor = { path = "../pacta-executor" }
 "#,
         );
         workspace.write_package("pacta-governance", "");
+        workspace.write_package("pacta-memory", "");
+        workspace.write_package("pacta-conformance", "");
         workspace.write_root_manifest();
 
         let outcome = check(
@@ -271,6 +377,91 @@ pacta-executor = { path = "../pacta-executor" }
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
 
         assert_eq!(check_active_prose(&root), Ok(()));
+    }
+
+    #[test]
+    fn current_core_reads_no_ambient_time() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+
+        assert_eq!(check_no_ambient_time(&root), Ok(()));
+    }
+
+    #[test]
+    fn ambient_time_reads_are_rejected() {
+        assert_eq!(
+            check_source_content("lib.rs", "let now = SystemTime::now();\n"),
+            vec![SourceViolation {
+                path: "lib.rs".to_owned(),
+                line: 1,
+                marker: "SystemTime::now",
+            }]
+        );
+        assert_eq!(
+            check_source_content("lib.rs", "let id = Uuid::now_v7();\n"),
+            vec![SourceViolation {
+                path: "lib.rs".to_owned(),
+                line: 1,
+                marker: "Uuid::now_v7",
+            }]
+        );
+        assert!(
+            check_source_content(
+                "lib.rs",
+                "pub fn from_millis(ms: u64) -> Self { Self(ms) }\n"
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn every_workspace_crate_has_a_boundary() {
+        // Tianheng coverage is advisory and never fails CI, so assert completeness here.
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let manifest =
+            fs::read_to_string(root.join("Cargo.toml")).expect("root manifest should be readable");
+        let members = workspace_members(&manifest);
+        assert!(!members.is_empty(), "expected to parse workspace members");
+
+        let governed: Vec<String> = constitution()
+            .static_boundaries()
+            .boundaries()
+            .iter()
+            .filter_map(|boundary| match boundary {
+                tianheng::Boundary::Crate(crate_boundary) => {
+                    Some(crate_boundary.target().package.clone())
+                }
+                _ => None,
+            })
+            .collect();
+
+        let ungoverned: Vec<&String> = members
+            .iter()
+            .filter(|member| !governed.contains(member))
+            .collect();
+        assert!(
+            ungoverned.is_empty(),
+            "every workspace crate must have a dependency boundary; ungoverned: {ungoverned:?}"
+        );
+    }
+
+    fn workspace_members(manifest: &str) -> Vec<String> {
+        let start = manifest
+            .find("members = [")
+            .expect("root manifest should declare workspace members");
+        let rest = &manifest[start..];
+        let end = rest.find(']').expect("members array should be closed");
+
+        rest[..end]
+            .lines()
+            .filter_map(|line| {
+                let entry = line.trim().trim_end_matches(',').trim_matches('"');
+                if entry.contains("crates/") {
+                    entry.rsplit('/').next().map(str::to_owned)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     #[test]
@@ -336,10 +527,12 @@ pacta-executor = { path = "../pacta-executor" }
 [workspace]
 resolver = "2"
 members = [
+    "pacta-conformance",
     "pacta-contract",
     "pacta-driver",
     "pacta-executor",
     "pacta-governance",
+    "pacta-memory",
     "tower",
 ]
 "#,
