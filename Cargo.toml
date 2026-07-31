@@ -12,13 +12,18 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
 license = "MIT OR Apache-2.0"
-publish = false
+repository = "https://github.com/tacticaldoll/pacta"
+readme = "README.md"
+keywords = ["durable", "lifecycle", "task", "contract", "runtime"]
+categories = ["asynchronous", "concurrency"]
+publish = true
 
 [workspace.dependencies]
-pacta-conformance = { path = "crates/pacta-conformance" }
-pacta-contract = { path = "crates/pacta-contract" }
-pacta-executor = { path = "crates/pacta-executor" }
+pacta-conformance = { path = "crates/pacta-conformance", version = "0.1.0" }
+pacta-contract = { path = "crates/pacta-contract", version = "0.1.0" }
+pacta-executor = { path = "crates/pacta-executor", version = "0.1.0" }
 serde = { version = "1.0", features = ["derive"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }
 tianheng = "0.1.6"
