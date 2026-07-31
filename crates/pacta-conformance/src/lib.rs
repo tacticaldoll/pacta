@@ -71,8 +71,8 @@ where
 /// The async runner reuses [`run`] rather than a duplicated scenario set: it adapts the async
 /// backend into the sync [`Registry`] by driving each operation to completion, so sync and async
 /// coverage cannot drift. This proves state-machine parity — the same bar the sync suite meets, which
-/// itself exercises no concurrency; concurrent contention on the async binding's `load`/`cas`
-/// decomposition is a separate, backend-side proof.
+/// itself exercises no concurrency. The at-most-once invariant under concurrent contention is a
+/// separate, *portable* check (`run_async_contention`) that any async backend runs.
 ///
 /// The adapter drives futures with a poll loop, so it fits backends whose futures make progress
 /// without an external reactor (the in-memory reference backend); a real-reactor durable backend
@@ -137,10 +137,66 @@ mod async_runner {
     {
         crate::run(move |pacts, lease_millis| BlockOn(make(pacts, lease_millis)));
     }
+
+    /// Verify the at-most-once invariant under concurrent contention, for any async backend.
+    ///
+    /// Two workers race a settlement on a single claimed pact; the transition port must apply it at
+    /// most once, so exactly one worker succeeds and the other resolves to a not-current-holder. The
+    /// check asserts this through the public op (never inspecting the backend's concurrency
+    /// mechanism), so it holds for a lock, a transaction, or a compare-and-set backend alike.
+    ///
+    /// Parallelism is real (OS threads); each thread drives its future to completion with
+    /// [`block_on`], so a future never migrates across threads and **no `Send` bound on the future is
+    /// required** — the suite pulls no async runtime.
+    pub fn run_async_contention<R, F>(make: F)
+    where
+        R: AsyncRegistry + 'static,
+        R::Error: core::fmt::Debug + Send,
+        F: Fn(Vec<Pact>, u64) -> R,
+    {
+        use std::sync::Arc;
+
+        // Enough rounds that an interleaving loading the same state in both threads is hit, and a
+        // broken (non-atomic) `apply` would overwhelmingly double-apply on some round.
+        for _ in 0..2000 {
+            let reg = Arc::new(make(vec![crate::a_pact()], crate::LEASE_MILLIS));
+            let retainer = block_on(reg.claim(&[crate::DOCKET], crate::at(0)))
+                .expect("claim should not error")
+                .expect("a pact should be claimable")
+                .retainer;
+
+            let a = {
+                let reg = Arc::clone(&reg);
+                let retainer = retainer.clone();
+                std::thread::spawn(move || block_on(reg.fulfill(&retainer)))
+            };
+            let b = {
+                let reg = Arc::clone(&reg);
+                let retainer = retainer.clone();
+                std::thread::spawn(move || block_on(reg.fulfill(&retainer)))
+            };
+            let (ra, rb) = (a.join().unwrap(), b.join().unwrap());
+
+            let winners = [ra.is_ok(), rb.is_ok()]
+                .into_iter()
+                .filter(|&ok| ok)
+                .count();
+            assert_eq!(
+                winners, 1,
+                "settlement must apply exactly once: a={ra:?} b={rb:?}"
+            );
+            assert!(
+                block_on(reg.claim(&[crate::DOCKET], crate::at(0)))
+                    .expect("claim should not error")
+                    .is_none(),
+                "a settled pact must not be claimable again"
+            );
+        }
+    }
 }
 
 #[cfg(feature = "async")]
-pub use async_runner::run_async;
+pub use async_runner::{run_async, run_async_contention};
 
 fn no_available_pact_returns_none<R, F>(make: &F)
 where

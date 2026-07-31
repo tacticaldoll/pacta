@@ -118,24 +118,12 @@ impl AsyncRegistry for MemoryRegistryAsync {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
-
-    const LEASE: u64 = 1000;
-
-    fn at(ms: u64) -> Timestamp {
-        Timestamp::from_millis(ms)
-    }
-
-    fn a_pact() -> Pact {
-        Pact::new(Uuid::new_v4(), "d".to_string(), "k".to_string(), Vec::new())
-    }
 
     /// The reference async backend is held to the same scenarios as every sync backend, through the
     /// shared conformance suite — the async binding proving itself, not a bespoke test set. This
     /// runs synchronously because the runner drives the ready futures to completion; it proves
-    /// state-machine parity, not concurrency (see below).
+    /// state-machine parity (concurrency is the separate contention check below).
     #[test]
     fn passes_async_conformance() {
         pacta_conformance::run_async(|pacts, lease_millis| {
@@ -143,43 +131,13 @@ mod tests {
         });
     }
 
-    /// The one property the parity runner cannot reach: the at-most-once invariant every backend's
-    /// `apply` must uphold under concurrent contention, regardless of the concurrency-control
-    /// mechanism it uses (here, one `Mutex` scope). Asserted through the public `fulfill` op — not
-    /// by inspecting the mechanism — so it holds for any backend. Needs genuine multi-threaded
-    /// parallelism, because the reference backend's ready futures do not interleave single-threaded.
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn concurrent_settle_applies_at_most_once() {
-        // Enough iterations that an interleaving loading the same state in both tasks is hit, and
-        // that a broken (non-atomic) fence would overwhelmingly double-apply on some iteration.
-        for _ in 0..2000 {
-            let reg = Arc::new(MemoryRegistryAsync::seeded(vec![a_pact()], LEASE));
-            let retainer = reg
-                .claim(&["d"], at(0))
-                .await
-                .unwrap()
-                .expect("claimable")
-                .retainer;
-
-            let a = {
-                let reg = Arc::clone(&reg);
-                let retainer = retainer.clone();
-                tokio::spawn(async move { reg.fulfill(&retainer).await })
-            };
-            let b = {
-                let reg = Arc::clone(&reg);
-                let retainer = retainer.clone();
-                tokio::spawn(async move { reg.fulfill(&retainer).await })
-            };
-            let (a, b) = (a.await.unwrap(), b.await.unwrap());
-
-            let winners = [a.is_ok(), b.is_ok()].into_iter().filter(|&ok| ok).count();
-            assert_eq!(
-                winners, 1,
-                "settlement must apply exactly once: a={a:?} b={b:?}"
-            );
-            // The winner settled the pact; a stranger's authority is gone and it is not claimable.
-            assert!(reg.claim(&["d"], at(0)).await.unwrap().is_none());
-        }
+    /// The at-most-once invariant under concurrent contention, proven through the shared *portable*
+    /// runner — the exact check any async backend runs, not a bespoke test set. It needs no async
+    /// runtime: the runner drives real parallelism with OS threads and `block_on`.
+    #[test]
+    fn passes_async_contention() {
+        pacta_conformance::run_async_contention(|pacts, lease_millis| {
+            MemoryRegistryAsync::seeded(pacts, lease_millis)
+        });
     }
 }
