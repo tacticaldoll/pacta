@@ -5,7 +5,8 @@
 //!
 //! - the lifecycle contract — [`Pact`], [`Claim`], [`Retainer`], [`Timestamp`],
 //!   [`Outcome`], [`Settlement`], and the [`Registry`] trait;
-//! - execution composition — [`Executor`], [`Execution`], [`Middleware`];
+//! - execution composition — [`Executor`], [`Execution`], [`Middleware`], and the
+//!   composition mechanism [`Identity`], [`Stack`], and [`Composition`];
 //! - the runtime driver — [`Driver`], [`Step`], [`DriverError`].
 //!
 //! It carries no logic of its own: every item here is a re-export.
@@ -63,7 +64,7 @@
 //! ```
 //! # use std::convert::Infallible;
 //! # use std::sync::Mutex;
-//! # use pacta::{Claim, Execution, Executor, Middleware, Outcome, Pact, Registry, Retainer, Timestamp, Transition};
+//! # use pacta::{Claim, Composition, Execution, Executor, Identity, Middleware, Outcome, Pact, Registry, Retainer, Timestamp, Transition};
 //! # struct Ledger { pending: Mutex<Option<Claim>> }
 //! # impl Registry for Ledger {
 //! #     type Error = Infallible;
@@ -79,16 +80,6 @@
 //! #     type Error = Infallible;
 //! #     fn execute(&mut self, _e: Execution) -> Result<Outcome, Infallible> { Ok(Outcome::Fulfilled) }
 //! # }
-//! # struct Witnessed<E> { inner: E }
-//! # impl<E: Executor> Executor for Witnessed<E> {
-//! #     type Error = E::Error;
-//! #     fn execute(&mut self, e: Execution) -> Result<Outcome, Self::Error> { self.inner.execute(e) }
-//! # }
-//! # struct Witness;
-//! # impl<E: Executor> Middleware<E> for Witness {
-//! #     type Executor = Witnessed<E>;
-//! #     fn wrap(&self, inner: E) -> Witnessed<E> { Witnessed { inner } }
-//! # }
 //! # let claim = Claim::new(
 //! #     Pact::new(Default::default(), "default".into(), "demo".into(), Vec::new()),
 //! #     Retainer::new(Default::default()),
@@ -97,7 +88,7 @@
 //! use pacta::{Driver, Step};
 //!
 //! let ledger = Ledger { pending: Mutex::new(Some(claim)) };
-//! let performer = Witness.wrap(Performer);          // middleware wraps the executor
+//! let performer = Composition::new().then(Identity).wrap(Performer); // compose, then wrap
 //! let mut driver = Driver::new(ledger, performer, ["default".to_string()]);
 //!
 //! assert_eq!(driver.step().unwrap(), Step::Fulfilled); // claim → execute → settle
@@ -110,4 +101,4 @@ pub use pacta_contract::{
     Claim, Outcome, Pact, Registry, Retainer, Settlement, Timestamp, Transition,
 };
 pub use pacta_driver::{Driver, DriverError, Step};
-pub use pacta_executor::{Execution, Executor, Middleware};
+pub use pacta_executor::{Composition, Execution, Executor, Identity, Middleware, Stack};

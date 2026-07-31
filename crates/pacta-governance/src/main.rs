@@ -37,6 +37,25 @@ const FACADE_NON_REEXPORT: &str = "non-re-export item in facade library";
 /// The facade source tree the re-exports-only scan guards, relative to the workspace root.
 const FACADE_SOURCE_DIR: &str = "crates/pacta/src";
 
+const EXECUTOR_ORCHESTRATION_REASON: &str = "pacta-executor is a blind composition seam: it must expose no orchestration/policy vocabulary as a public symbol (retry, timeout, backoff, circuit, quota, rate-limit). That policy is a consumer or sibling concern composed onto the seam, never a core convenience — a named convenience method is exactly where sibling-owned or non-goal orchestration would leak into the core. The forbidden list is generic non-goal vocabulary and names no sibling, because sibling-blindness forbids naming what it checks against. Coverage is partial by nature (a line scan sees no macro-expanded item and skips `pub use` re-exports and `pub const` values), so this tooth complements review rather than replacing it.";
+const EXECUTOR_ORCHESTRATION_MARKER: &str =
+    "orchestration/policy vocabulary in a public executor symbol";
+
+/// The executor source tree the orchestration-vocabulary scan guards, relative to the workspace root.
+const EXECUTOR_SOURCE_DIR: &str = "crates/pacta-executor/src";
+
+/// Generic orchestration/policy words, normalized (lowercased, separators removed), that must
+/// not appear in a public `pacta-executor` symbol. Drawn from the stated non-goals; names no
+/// sibling product.
+const FORBIDDEN_ORCHESTRATION_WORDS: &[&str] = &[
+    "retry",
+    "timeout",
+    "backoff",
+    "circuit",
+    "quota",
+    "ratelimit",
+];
+
 const ACTIVE_PROSE_FILES: &[&str] = &[
     "AGENTS.md",
     "PROJECT.md",
@@ -252,6 +271,17 @@ fn main() -> ExitCode {
             }
             return ExitCode::from(1);
         }
+
+        if let Err(violations) = check_executor_no_orchestration(&root) {
+            eprintln!("pacta executor governance failed: {EXECUTOR_ORCHESTRATION_REASON}");
+            for violation in violations {
+                eprintln!(
+                    "{}:{}: `{}`",
+                    violation.path, violation.line, violation.marker
+                );
+            }
+            return ExitCode::from(1);
+        }
     }
 
     tianheng::run(&constitution(), args)
@@ -426,6 +456,110 @@ fn check_facade_content(path: &str, content: &str) -> Vec<SourceViolation> {
     }
 
     violations
+}
+
+fn check_executor_no_orchestration(root: &Path) -> Result<(), Vec<SourceViolation>> {
+    let mut violations = Vec::new();
+    let files = collect_rs_files(&root.join(EXECUTOR_SOURCE_DIR));
+
+    // No executor source found (missing or empty tree) is a vacuous pass — mirror the
+    // facade scan's non-vacuous guard and fail rather than certify an unscanned crate.
+    if files.is_empty() {
+        violations.push(SourceViolation {
+            path: EXECUTOR_SOURCE_DIR.to_owned(),
+            line: 0,
+            marker: "no executor source files found",
+        });
+    }
+
+    for file in files {
+        let relative = file
+            .strip_prefix(root)
+            .unwrap_or(&file)
+            .to_string_lossy()
+            .into_owned();
+        let Ok(content) = fs::read_to_string(&file) else {
+            violations.push(SourceViolation {
+                path: relative,
+                line: 0,
+                marker: "unreadable executor source",
+            });
+            continue;
+        };
+        violations.extend(check_executor_content(&relative, &content));
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(violations)
+    }
+}
+
+/// A line scan for a public item whose declared name denotes an orchestration policy. It is
+/// deliberately a line scan, not a parser: `pacta-governance` may depend only on `tianheng`, so
+/// it cannot pull in `syn`. It judges only lines that begin a public item definition
+/// (`pub fn/struct/enum/trait/type/static/union/mod/macro`); `pub use` re-exports and
+/// `pub(crate)`/`pub(super)` are not part of the public API surface this seam is judged on. The
+/// declared name is normalized (lowercased, separators removed) and matched against the forbidden
+/// word list, so `RetryLayer`, `retry_with`, and `rate_limit` all trip.
+fn check_executor_content(path: &str, content: &str) -> Vec<SourceViolation> {
+    let mut violations = Vec::new();
+
+    for (index, line) in content.lines().enumerate() {
+        let trimmed = line.trim_start();
+        if !trimmed.starts_with("pub ") || trimmed.starts_with("pub use ") {
+            continue;
+        }
+
+        let Some(name) = public_item_name(trimmed) else {
+            continue;
+        };
+
+        let normalized: String = name
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .map(|c| c.to_ascii_lowercase())
+            .collect();
+
+        if FORBIDDEN_ORCHESTRATION_WORDS
+            .iter()
+            .any(|word| normalized.contains(word))
+        {
+            violations.push(SourceViolation {
+                path: path.to_owned(),
+                line: index + 1,
+                marker: EXECUTOR_ORCHESTRATION_MARKER,
+            });
+        }
+    }
+
+    violations
+}
+
+/// Extract the declared identifier of a public item from a declaration line, or `None` if the
+/// line declares no item this scan judges. Finds the item keyword and returns the identifier
+/// token that follows it.
+fn public_item_name(declaration: &str) -> Option<&str> {
+    const ITEM_KEYWORDS: &[&str] = &[
+        "fn", "struct", "enum", "trait", "type", "static", "union", "mod", "macro",
+    ];
+
+    let tokens: Vec<&str> = declaration.split_whitespace().collect();
+    for (position, token) in tokens.iter().enumerate() {
+        if ITEM_KEYWORDS.contains(token)
+            && let Some(next) = tokens.get(position + 1)
+        {
+            let end = next
+                .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                .unwrap_or(next.len());
+            if end > 0 {
+                return Some(&next[..end]);
+            }
+        }
+    }
+
+    None
 }
 
 fn collect_rs_files(dir: &Path) -> Vec<PathBuf> {
@@ -677,6 +811,54 @@ pub use pacta_driver::{
                 marker: FACADE_NON_REEXPORT,
             }]
         );
+    }
+
+    #[test]
+    fn executor_orchestration_vocabulary_is_rejected() {
+        // Proof the tooth bites, across the name shapes the scan must catch.
+        for source in [
+            "pub struct RetryLayer;\n",
+            "pub fn with_timeout() {}\n",
+            "pub fn rate_limit() {}\n",
+            "pub trait Backoff {}\n",
+        ] {
+            assert_eq!(
+                check_executor_content("lib.rs", source),
+                vec![SourceViolation {
+                    path: "lib.rs".to_owned(),
+                    line: 1,
+                    marker: EXECUTOR_ORCHESTRATION_MARKER,
+                }],
+                "expected a violation for `{source}`",
+            );
+        }
+    }
+
+    #[test]
+    fn executor_composition_vocabulary_is_clean() {
+        // The precision half: the shipped composition vocabulary is not orchestration and passes,
+        // so the proof distinguishes a reacting boundary from one that always fires.
+        let content = "\
+pub struct Identity;
+pub struct Stack<Inner, Outer> {}
+pub struct Composition<M> {}
+pub fn then<N>(self, next: N) {}
+pub const fn new() {}
+pub use pacta_contract::{Outcome, Settlement};
+";
+        assert!(check_executor_content("lib.rs", content).is_empty());
+    }
+
+    #[test]
+    fn real_executor_source_has_no_orchestration_vocabulary() {
+        // Non-vacuous clean: the real crate passes AND at least one file was scanned.
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let files = collect_rs_files(&root.join(EXECUTOR_SOURCE_DIR));
+        assert!(
+            !files.is_empty(),
+            "scanned no executor source — the gate would pass vacuously"
+        );
+        assert_eq!(check_executor_no_orchestration(&root), Ok(()));
     }
 
     #[test]
