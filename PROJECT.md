@@ -32,6 +32,8 @@ The behavior that must be protected at all costs:
 - **Brief**: Non-business operational context attached to a Pact.
 - **Registry**: The pure lifecycle state machine tracking Pacts and Dockets.
 - **Executor**: The public role responsible for executing a claimed Pact through Pacta-native middleware.
+- **Middleware**: Pacta-native execution composition around an executor, acting as a decorator.
+- **Policy**: A minimal value naming an orchestration intent (like retry or timeout) evaluated by middleware.
 - **Claim**: A Pact plus the authority needed to process it.
 - **Retainer**: The opaque token proving authority to fulfill or breach a Claim.
 - **Tribunal**: Terminal review for exhausted Pacts that should no longer be handled automatically.
