@@ -36,6 +36,36 @@ pub trait Executor {
     fn execute(&mut self, execution: Execution) -> Result<Outcome, Self::Error>;
 }
 
+/// The decision a [`Policy`] renders for one infrastructure failure.
+///
+/// This is a closed, two-variant decision (deliberately not `#[non_exhaustive]`, unlike the
+/// growing kernel protocol enums): it is the complete answer to one question — keep lapsing,
+/// or concede — not a protocol that accretes new cases over time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    /// Propagate the error so the claim is left unsettled: it lapses and may be reclaimed
+    /// and attempted again by a later step.
+    Continue,
+    /// Give up: settle the claim as breached now instead of letting it lapse again.
+    Concede,
+}
+
+/// A user-obligation trait deciding, after a claimed pact's execution fails with an
+/// infrastructure error, whether to keep letting the claim lapse (to be reclaimed and
+/// attempted again) or concede as a terminal breach.
+///
+/// This governs only infrastructure failures — an [`Executor::Error`] the
+/// shipped `Driver` would otherwise leave unsettled to lapse and be reclaimed indefinitely.
+/// It has no bearing on a clean business [`Outcome`]: the shipped `Driver` always settles a
+/// clean `Outcome::Breached` as terminal, so there is no "retry a business breach" decision
+/// for a `Policy` to make (see `BACKLOG.md`'s `lifecycle-persistence` entry: attempt limits
+/// stay outside the registry, as user-owned policy — this trait is that policy's seam).
+pub trait Policy<E> {
+    /// Decide the verdict for the `attempts`-th consecutive infrastructure failure (counting
+    /// the current one) with `error`.
+    fn decide(&self, attempts: u32, error: &E) -> Verdict;
+}
+
 /// A Pacta-native decorator over execution: the Tower `Layer` analog. Because `wrap`
 /// takes an `Executor` and returns an `Executor`, middleware compose arbitrarily
 /// (the closure property), which is how orchestration is composed onto the seam.
@@ -148,6 +178,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use pacta_contract::Uuid;
+
     use super::*;
 
     #[derive(Debug)]
@@ -365,6 +399,182 @@ mod tests {
                 "second:exit",
                 "first:exit",
             ]
+        );
+    }
+
+    // In-workspace reference validator for `Policy`, per `composition-governance`'s "trait's
+    // in-workspace validator may be test-only scaffolding" scenario: never public API.
+
+    #[derive(Clone, Copy)]
+    struct FixedThreshold {
+        threshold: u32,
+    }
+
+    impl Policy<DummyError> for FixedThreshold {
+        fn decide(&self, attempts: u32, _error: &DummyError) -> Verdict {
+            if attempts >= self.threshold {
+                Verdict::Concede
+            } else {
+                Verdict::Continue
+            }
+        }
+    }
+
+    struct FailingExecutor;
+    impl Executor for FailingExecutor {
+        type Error = DummyError;
+        fn execute(&mut self, _execution: Execution) -> Result<Outcome, Self::Error> {
+            Err(DummyError)
+        }
+    }
+
+    struct GiveUpExecutor<Inner, P> {
+        inner: Inner,
+        policy: P,
+        attempts: HashMap<Uuid, u32>,
+    }
+
+    impl<Inner, P> Executor for GiveUpExecutor<Inner, P>
+    where
+        Inner: Executor,
+        P: Policy<Inner::Error>,
+    {
+        type Error = Inner::Error;
+
+        fn execute(&mut self, execution: Execution) -> Result<Outcome, Self::Error> {
+            let id = execution.pact.id;
+            match self.inner.execute(execution) {
+                Ok(outcome) => {
+                    self.attempts.remove(&id);
+                    Ok(outcome)
+                }
+                Err(error) => {
+                    let attempts = self.attempts.entry(id).or_insert(0);
+                    *attempts += 1;
+                    match self.policy.decide(*attempts, &error) {
+                        Verdict::Continue => Err(error),
+                        Verdict::Concede => Ok(Outcome::Breached),
+                    }
+                }
+            }
+        }
+    }
+
+    struct GiveUp<P> {
+        policy: P,
+    }
+
+    impl<E, P> Middleware<E> for GiveUp<P>
+    where
+        E: Executor,
+        P: Policy<E::Error> + Clone,
+    {
+        type Executor = GiveUpExecutor<E, P>;
+
+        fn wrap(&self, executor: E) -> Self::Executor {
+            GiveUpExecutor {
+                inner: executor,
+                policy: self.policy.clone(),
+                attempts: HashMap::new(),
+            }
+        }
+    }
+
+    fn execution_with_id(id: Uuid) -> Execution {
+        Execution::new(Pact::new(
+            id,
+            "dummy_docket".to_string(),
+            "dummy_kind".to_string(),
+            vec![],
+        ))
+    }
+
+    #[test]
+    fn below_threshold_keeps_propagating_the_error() {
+        let mut executor = GiveUp {
+            policy: FixedThreshold { threshold: 3 },
+        }
+        .wrap(FailingExecutor);
+        let id = Uuid::from_u128(1);
+
+        assert!(executor.execute(execution_with_id(id)).is_err());
+        assert!(executor.execute(execution_with_id(id)).is_err());
+    }
+
+    #[test]
+    fn reaching_threshold_concedes_as_breached() {
+        let mut executor = GiveUp {
+            policy: FixedThreshold { threshold: 3 },
+        }
+        .wrap(FailingExecutor);
+        let id = Uuid::from_u128(2);
+
+        assert!(executor.execute(execution_with_id(id)).is_err());
+        assert!(executor.execute(execution_with_id(id)).is_err());
+        assert_eq!(
+            executor.execute(execution_with_id(id)).unwrap(),
+            Outcome::Breached
+        );
+    }
+
+    #[test]
+    fn a_success_resets_the_failure_count() {
+        struct FlakyThenFulfilling {
+            fail_next: bool,
+        }
+        impl Executor for FlakyThenFulfilling {
+            type Error = DummyError;
+            fn execute(&mut self, _execution: Execution) -> Result<Outcome, Self::Error> {
+                if self.fail_next {
+                    Err(DummyError)
+                } else {
+                    Ok(Outcome::Fulfilled)
+                }
+            }
+        }
+
+        let mut executor = GiveUp {
+            policy: FixedThreshold { threshold: 2 },
+        }
+        .wrap(FlakyThenFulfilling { fail_next: true });
+        let id = Uuid::from_u128(3);
+
+        // attempts = 1, below the threshold of 2.
+        assert!(executor.execute(execution_with_id(id)).is_err());
+
+        // A success in between resets the count instead of letting it carry toward the
+        // threshold.
+        executor.inner.fail_next = false;
+        assert_eq!(
+            executor.execute(execution_with_id(id)).unwrap(),
+            Outcome::Fulfilled
+        );
+
+        // Failing again starts back at attempts = 1, still below the threshold of 2.
+        executor.inner.fail_next = true;
+        assert!(executor.execute(execution_with_id(id)).is_err());
+    }
+
+    #[test]
+    fn distinct_pacts_are_tracked_independently() {
+        let mut executor = GiveUp {
+            policy: FixedThreshold { threshold: 2 },
+        }
+        .wrap(FailingExecutor);
+        let first = Uuid::from_u128(4);
+        let second = Uuid::from_u128(5);
+
+        assert!(executor.execute(execution_with_id(first)).is_err());
+        assert!(executor.execute(execution_with_id(second)).is_err());
+
+        // Each pact's own count reaches the threshold independently, not a shared one.
+        assert_eq!(
+            executor.execute(execution_with_id(first)).unwrap(),
+            Outcome::Breached
+        );
+        assert_eq!(
+            executor.execute(execution_with_id(second)).unwrap(),
+            Outcome::Breached
         );
     }
 }

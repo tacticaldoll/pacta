@@ -82,6 +82,10 @@ implementation, so no obligation is a contract without a client.
 - **WHEN** a user-obligation trait ships with an in-workspace consumer and a reference or exercising implementation that validates its shape
 - **THEN** that reference or exercising implementation MAY be `#[cfg(test)]`-only scaffolding never exposed as public API, distinct from a publicly shippable, production-usable orchestration `Middleware` — which stays sibling- or consumer-owned regardless of where the trait it implements is defined
 
+#### Scenario: Policy is the shipped user-obligation trait for infrastructure-failure disposition
+- **WHEN** `pacta-executor` ships the `Policy` trait and its `Verdict` decision type
+- **THEN** `Policy::decide` is consulted only for infrastructure failures (an `Executor::Error`), never for a clean business `Outcome`, its shape is validated by an in-workspace `#[cfg(test)]`-only reference `Middleware` and test rather than a publicly shippable implementation, and no concrete, production-usable orchestration `Middleware` that consumes it ships from this workspace
+
 ### Requirement: Pattern Admission Guardrail
 Pacta SHALL admit a composition pattern into a core crate only when it passes a stated
 four-question guardrail, so that Pacta's pattern-leading stance ("Consumers ignite pacta's work;
