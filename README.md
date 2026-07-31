@@ -1,45 +1,36 @@
-# rust-openspec-starter
+# Pacta
 
-An opinionated starter for Rust projects that use OpenSpec, ADRs, conventional
-commits, and AI-agent-friendly governance from day one.
+A Tower-native, Middleware-driven task runtime for Rust.
 
-This repository is intentionally small. It provides the process skeleton for a
-new project, not product-specific architecture.
+Pacta was born from a fundamental critique of traditional, broker-centric job queues. Traditional queues suffer from "Semantic Bloat" — they pull execution policies (retries, backoff, routing, dead-letter storage, priority) into the storage layer and the core job envelope. This forces every storage backend (Postgres, Redis, etc.) to implement complex business logic, making the system heavy, hard to extend, and prone to breaking.
 
-## Use
+Pacta takes a different approach: **Execution is Middleware, Storage is purely a Lifecycle State Machine.**
 
-1. Create a new repository from this starter.
-2. Replace placeholder project metadata in `PROJECT.md`, `README.md`, and
-   `Cargo.toml`.
-3. Install or expose the OpenSpec CLI in your shell.
-4. Generate local agent shims for your editor or agent:
+## Philosophy
 
-   ```bash
-   openspec init --tools codex
-   # or: openspec init --tools claude,cursor,github-copilot
-   ```
+By completely delegating execution orchestration (retries, timeouts, tracing, rate limiting) to the `Middleware` ecosystem, the storage layer (`Store`) degrades into a pure, minimal state machine. The Store only tracks lifecycle transitions: `reserve` (lease), `ack` (success), and `nack` (failure/dead).
 
-5. Start the first project-specific change with OpenSpec:
+- **Store**: Pure state machine. Never computes backoff, never manages delays.
+- **Execution**: Handled by standard `Tower` Middleware.
+- **Contract**: Zero-dependency `pacta-contract` enforced by `tianheng`.
 
-   ```bash
-   openspec new change "initial-project-shape"
-   ```
+## Getting Started
 
-   This change should replace placeholders, choose the real crate layout, add
-   the first specs, and make the Rust Definition of Done runnable.
+*(Wait for Phase 2 implementation...)*
 
-## Included
+## Contributing
 
-- `AGENTS.md` - repository rules for AI coding agents and humans.
-- `PROJECT.md` - project-specific contract, terminology, and priorities.
-- `docs/development-flow.md` - short OpenSpec and commit checklist.
-- `docs/adr/` - architecture decision record skeleton.
-- `openspec/` - empty OpenSpec structure ready for specs and changes.
-- A Rust workspace policy anchor in `Cargo.toml`. It intentionally has no
-  crates until the first project-specific change chooses the real layout.
+This project uses **OpenSpec** (spec-driven development) and strictly enforces AI-agent-friendly governance. 
 
-Generated agent shims such as `.codex/` and `.claude/` are per-clone local
-files and should not be committed.
+1. Please read `AGENTS.md` before contributing. It contains the project's absolute axioms and adversarial review stance.
+2. Read `PROJECT.md` for terminology.
+3. Check `BACKLOG.md` for roadmap and deferred work.
+4. Use the `openspec` CLI to propose and apply changes.
+
+```bash
+# Scaffold a new change
+openspec new change "your-feature-name"
+```
 
 ## License
 
