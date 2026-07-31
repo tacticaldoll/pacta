@@ -42,6 +42,15 @@ roadmap and does not create implementation commitments. Shipped truth lives in
   deferred below as "premature ahead of real layers": a composition *mechanism* earns its place
   by its own soundness under the pattern-admission guardrail — Pacta leads with patterns and
   consumers do not gate it — distinct from concrete orchestration *policy*, which stays deferred.
+- The `Policy` user-obligation trait is shipped in `pacta-executor`, replacing the inert
+  0.1.0 value type: `Policy::decide(attempts, &error) -> Verdict` governs only
+  infrastructure-failure disposition (`Continue` to keep lapsing, `Concede` to settle as a
+  terminal breach), never a clean business `Outcome` — the shipped `Driver` already settles
+  those as terminal, so there is no "retry a breach" decision for it to make. Validated by an
+  in-workspace `#[cfg(test)]`-only reference `Middleware`/`Executor` and tests, per
+  `composition-governance`'s validator-may-be-test-only scenario. A concrete, publicly
+  shippable orchestration `Middleware` that consumes `Policy` stays sibling- or
+  consumer-owned and does not ship from this workspace.
 
 ## Workspace Composition
 
@@ -81,17 +90,10 @@ extension surface are justified.
 ### Execution Composition
 
 - Retry, timeout, rate limit, tracing, and similar orchestration behavior, delivered
-  as `Middleware` implementations composed onto the existing seam.
-- A `Policy` user-obligation trait, in the sense of `tower::retry::Policy` — a trait
-  the user implements and a concrete orchestration middleware consumes. It was
-  removed from 0.1.0 as an inert value type (no consumer, no reference impl) and
-  must return only co-designed with its first consuming middleware, so its method
-  set is validated by a real client rather than frozen ahead of one. This
-  "co-designed with a real client" requirement is satisfied by an in-workspace
-  `#[cfg(test)]`-only reference implementation and a test that exercises it (see
-  `composition-governance` spec), not by waiting for an external production
-  adopter. The concrete orchestration `Middleware` that consumes `Policy` in real
-  use stays sibling- or consumer-owned and does not ship from this workspace.
+  as `Middleware` implementations composed onto the existing seam. The `Policy` trait
+  such a middleware may consume is shipped — see Current Baseline — but the concrete,
+  publicly shippable middleware itself stays sibling- or consumer-owned and remains a
+  candidate outside this workspace.
 - Further composition ergonomics around `Executor` beyond the shipped `Identity`/`Stack`/
   `Composition` mechanism (the blind assembler itself is now shipped — see Current Baseline).
 
