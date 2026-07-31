@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-07-17
+
+Reifies `Middleware` composition so it is manifest on the consumer side. Additive — the
+durable contract is unchanged and no existing API is altered.
+
+### Added
+
+- **`Identity`, `Stack<Inner, Outer>`, and `Composition`** in `pacta-executor`, re-exported
+  through `pacta`. `Identity` is the no-op middleware (the empty stack); `Stack` reifies the
+  closure property as a holdable value that is itself a `Middleware`; `Composition` is a blind
+  assembler that accumulates `Stack` over `Identity` through a single generic `then` and exposes
+  no named policy method. The composition order is documented — the first middleware added is
+  outermost and observes each execution first.
+- **Executor orchestration-vocabulary governance reaction**: an executable reaction rejects a
+  public `pacta-executor` symbol whose name denotes retry, timeout, backoff, circuit, quota, or
+  rate-limit, keeping the seam a blind mechanism. The forbidden list is generic non-goal
+  vocabulary and names no sibling; the reaction is proven to fire.
+
+### Changed
+
+- The `pacta` crate-root composition doctest now composes through `Composition`/`Identity`.
+
 ## [0.2.0] - 2026-07-17
 
 Unifies the synchronous and asynchronous `Registry` bindings onto a single transition
@@ -133,6 +155,7 @@ First public release: the thin lifecycle foundation, not a complete durable runt
 - No ingress API (`Signal -> Pact` is user-provided, not a shipped surface).
 - No framework adapters (Tower, HTTP) and no retry/backoff/timeout orchestration.
 
+[0.2.1]: https://github.com/tacticaldoll/pacta/releases/tag/v0.2.1
 [0.2.0]: https://github.com/tacticaldoll/pacta/releases/tag/v0.2.0
 [0.1.2]: https://github.com/tacticaldoll/pacta/releases/tag/v0.1.2
 [0.1.1]: https://github.com/tacticaldoll/pacta/releases/tag/v0.1.1
