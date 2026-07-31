@@ -197,3 +197,27 @@ can no longer settle or heartbeat, identical to a lapse.
 - **WHEN** release is attempted on a pact already fulfilled or breached
 - **THEN** the registry rejects it, because a concluded obligation has no claim to relinquish
 
+
+### Requirement: Lifecycle Semantics Are A Single Shared Pure Kernel
+The pact lifecycle semantics SHALL be defined once as a pure, sans-I/O, colorless `lifecycle`
+module in `pacta-contract` — the claim-eligibility predicate, the state transitions (claim,
+heartbeat, settle, release), the current-holder authority check, and the lease arithmetic —
+and every `Registry` backend SHALL compose over that module rather than re-implementing those
+semantics. The module SHALL read no clock (time is an injected parameter), perform no I/O, and
+mint no non-deterministic value (the retainer/fencing value is supplied by the backend and
+passed in); storage and retainer minting remain the backend's. This makes the semantics
+single-sourced across backends and across a future async binding, so they cannot drift; the
+other lifecycle requirements in this spec are unchanged and are now realized by this shared
+kernel.
+
+#### Scenario: A backend composes over the shared kernel
+- **WHEN** a `Registry` backend decides claim-eligibility or applies a lifecycle transition
+- **THEN** it calls the shared `lifecycle` module rather than computing eligibility or the transition itself
+
+#### Scenario: The kernel is pure
+- **WHEN** the `lifecycle` module computes an eligibility verdict or a transition
+- **THEN** it reads only its arguments — no clock, no I/O, no minting — with time and the retainer value injected by the caller
+
+#### Scenario: Extraction preserves behavior
+- **WHEN** the reference backend is refactored to compose over the shared kernel
+- **THEN** it passes the identical `pacta-conformance` suite with no change to its observable behavior
