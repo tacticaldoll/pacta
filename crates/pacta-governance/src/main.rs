@@ -56,6 +56,8 @@ const FORBIDDEN_ORCHESTRATION_WORDS: &[&str] = &[
     "ratelimit",
 ];
 
+const CHANGELOG_FOOTER_REASON: &str = "every CHANGELOG.md version heading must resolve through a matching reference-style footer link, so a release entry can never ship without resolving to its GitHub release page.";
+
 const ACTIVE_PROSE_FILES: &[&str] = &[
     "AGENTS.md",
     "PROJECT.md",
@@ -282,6 +284,17 @@ fn main() -> ExitCode {
             }
             return ExitCode::from(1);
         }
+
+        if let Err(violations) = check_changelog_footer_links(&root) {
+            eprintln!("pacta changelog governance failed: {CHANGELOG_FOOTER_REASON}");
+            for violation in violations {
+                eprintln!(
+                    "CHANGELOG.md:{}: missing footer link for `[{}]`",
+                    violation.line, violation.version
+                );
+            }
+            return ExitCode::from(1);
+        }
     }
 
     tianheng::run(&constitution(), args)
@@ -361,6 +374,68 @@ fn check_prose_content(path: &str, content: &str) -> Vec<ProseViolation> {
     }
 
     violations
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ChangelogFooterViolation {
+    line: usize,
+    version: String,
+}
+
+/// Every `## [X.Y.Z]` version heading in `CHANGELOG.md` must have a matching
+/// `[X.Y.Z]: <url>` reference-style footer link, so a release entry cannot ship without
+/// resolving to its GitHub release page — the gap that motivated this reaction (a
+/// `prepare 0.3.0` release added the heading but missed the footer link once, caught only
+/// by manual inspection after the tag had already been pushed). This is deliberately a line
+/// scan, not a Markdown parser, for the same reason `check_executor_content` is: this crate
+/// may depend only on `tianheng`, so it cannot pull in a Markdown crate.
+fn check_changelog_footer_links(root: &Path) -> Result<(), Vec<ChangelogFooterViolation>> {
+    let Ok(content) = fs::read_to_string(root.join("CHANGELOG.md")) else {
+        return Err(vec![ChangelogFooterViolation {
+            line: 0,
+            version: String::from("<unreadable>"),
+        }]);
+    };
+
+    let mut headings: Vec<(usize, String)> = Vec::new();
+    let mut footer_versions: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for (index, line) in content.lines().enumerate() {
+        let trimmed = line.trim_start();
+        if let Some(rest) = trimmed.strip_prefix("## [")
+            && let Some(end) = rest.find(']')
+        {
+            let version = &rest[..end];
+            if is_version_like(version) {
+                headings.push((index + 1, version.to_owned()));
+            }
+        } else if let Some(rest) = line.strip_prefix('[')
+            && let Some(end) = rest.find("]:")
+        {
+            let version = &rest[..end];
+            if is_version_like(version) {
+                footer_versions.insert(version.to_owned());
+            }
+        }
+    }
+
+    let violations: Vec<ChangelogFooterViolation> = headings
+        .into_iter()
+        .filter(|(_, version)| !footer_versions.contains(version))
+        .map(|(line, version)| ChangelogFooterViolation { line, version })
+        .collect();
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(violations)
+    }
+}
+
+/// Whether `candidate` looks like a version string (digits and `.` only) rather than, for
+/// example, `Unreleased` or an unrelated reference-style link label.
+fn is_version_like(candidate: &str) -> bool {
+    !candidate.is_empty() && candidate.chars().all(|c| c.is_ascii_digit() || c == '.')
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -728,6 +803,52 @@ pacta-driver = { path = "../pacta-driver" }
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
 
         assert_eq!(check_facade_reexports_only(&root), Ok(()));
+    }
+
+    #[test]
+    fn current_changelog_footer_links_are_complete() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+
+        assert_eq!(check_changelog_footer_links(&root), Ok(()));
+    }
+
+    #[test]
+    fn changelog_heading_missing_footer_link_fails_loudly() {
+        let workspace = TempWorkspace::new("pacta-governance-changelog-missing-footer");
+        fs::write(
+            workspace.path.join("CHANGELOG.md"),
+            "# Changelog\n\n## [0.9.0] - 2026-01-01\n\nSome release.\n\n## [0.8.0] - 2025-01-01\n\nAn earlier release.\n\n[0.8.0]: https://example.com/releases/tag/v0.8.0\n",
+        )
+        .expect("synthetic changelog should be writable");
+
+        let Err(violations) = check_changelog_footer_links(&workspace.path) else {
+            panic!("a version heading with no matching footer link must fail the gate");
+        };
+        assert_eq!(
+            violations,
+            vec![ChangelogFooterViolation {
+                line: 3,
+                version: String::from("0.9.0"),
+            }],
+            "expected only the 0.9.0 heading (missing its footer link) to be flagged, not 0.8.0 (which has one): {violations:?}"
+        );
+    }
+
+    #[test]
+    fn missing_changelog_file_fails_loudly() {
+        // A root with no CHANGELOG.md at all must fail the gate, not pass vacuously.
+        let workspace = TempWorkspace::new("pacta-governance-missing-changelog");
+
+        let Err(violations) = check_changelog_footer_links(&workspace.path) else {
+            panic!("a root with no CHANGELOG.md must fail the gate");
+        };
+        assert_eq!(
+            violations,
+            vec![ChangelogFooterViolation {
+                line: 0,
+                version: String::from("<unreadable>"),
+            }]
+        );
     }
 
     #[test]
