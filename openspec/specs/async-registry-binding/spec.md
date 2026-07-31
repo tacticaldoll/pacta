@@ -66,3 +66,40 @@ A backend's error type SHALL be able to represent that outcome (the shared kerne
 #### Scenario: A reclaimed pact's stale transition is rejected
 - **WHEN** a holder's lease lapsed and the pact was reclaimed, then the prior holder attempts a transition
 - **THEN** `apply` finds the retainer no longer holds the pact and the transition resolves to a not-current-holder error
+
+### Requirement: The Transition Bound Does Not Color The Apply Future
+The `Transition` port type SHALL be `Send + Sync`, and the documentation SHALL state precisely what
+that bound does and does not mean. It means the transition **closure** — the pure kernel decision —
+can be shared and moved across thread boundaries, which a backend needs to hold it across its own
+atomic scope or hand it to a worker. It SHALL NOT be documented as implying that the async binding's
+`apply` **future** is `Send`: future coloring stays the consumer's, consistent with the binding's
+`Send`-agnostic futures. A backend that requires a `Send` `apply` future satisfies that at its own
+concrete call site, not because the `Transition` bound provides it.
+
+#### Scenario: The Transition bound is documented as closure-sharing
+- **WHEN** a consumer reads the `Transition` documentation
+- **THEN** it states that `Send + Sync` lets the transition closure be shared across thread boundaries, so a backend can hold or hand off the decision
+
+#### Scenario: The Transition bound is not documented as coloring the future
+- **WHEN** a consumer reads the `Transition` and async `apply` documentation
+- **THEN** it states that the `Transition` bound does not make the async `apply` future `Send`, keeping future coloring the consumer's to compose, consistent with the binding's `Send`-agnostic futures
+
+### Requirement: apply_via_cas Is Unbounded Retry With No Policy
+The optional `apply_via_cas` helper SHALL be documented as an unbounded `load → decide →
+set-if-unchanged` retry loop: under sustained contention it retries indefinitely and provides no
+fairness, timeout, or cancellation guarantee. Termination under pathological contention SHALL be
+documented as caller/runtime policy, not a property of the helper. Documenting this SHALL NOT add a
+retry policy, a backoff, a timeout, or a runtime to the helper — it remains the minimal
+compare-and-set strategy, and any bound on its retrying is composed by the caller outside it.
+
+#### Scenario: The helper documents unbounded retry
+- **WHEN** a consumer reads the `apply_via_cas` documentation
+- **THEN** it states that under sustained contention the helper retries without bound and offers no fairness, timeout, or cancellation guarantee
+
+#### Scenario: Termination is caller policy
+- **WHEN** the documentation describes bounding the helper's retrying under pathological contention
+- **THEN** it attributes termination and cancellation to caller or runtime policy composed around the helper, not to the helper itself
+
+#### Scenario: Documenting the contract adds no orchestration
+- **WHEN** the `apply_via_cas` contract is clarified
+- **THEN** the helper gains no retry policy, backoff, timeout, cancellation, or runtime, remaining the minimal set-if-unchanged strategy

@@ -117,9 +117,10 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
     holder whose lease lapsed but whose pact nobody reclaimed can still `fulfill`/`breach`/`release`
     (its retainer is still current); `heartbeat` treats `now == expiry` as still-alive (`>=`). Proven by
     `pacta-conformance::late_fulfill_before_reclaim_succeeds` and the `lifecycle-persistence`
-    reclaim-rotation requirement; both bindings share it and cannot drift. Coverage to pin: the
-    `heartbeat` `now == expiry` boundary is not yet asserted in `pacta-conformance` (the
-    release-on-lapsed case is covered by `released_pact_withheld_until_reclaimable`).
+    reclaim-rotation requirement; both bindings share it and cannot drift. The `heartbeat`
+    `now == expiry` boundary is now asserted by
+    `pacta-conformance::heartbeat_at_expiry_boundary_succeeds` (0.2.2), so the fence's `>=` edge is
+    pinned as well as its after-expiry rejection.
   - **Conformance is the proof.** The async runner adapts an `AsyncRegistry` into the sync suite via a
     `block_on`, running the existing scenario bodies verbatim (one scenario set, no drift — state-machine
     parity); the at-most-once invariant under real contention is the portable `run_async_contention`
@@ -127,13 +128,16 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
     against the reference backend, on pacta's own authority — never gated on a downstream consumer (spec:
     `product-positioning` "Correctness Is Conformance-Self-Proven"). Backend throughput is consumer-owned
     edge, not a pacta gate.
-  - **Remaining: the `0.2.0` finalize.** The apply-port unification changed the sync `Registry`
-    required-method set (breaking at the implementer surface), so the release is `0.1.2 → 0.2.0` (0.1.3
-    skipped — no additive-only content ever mapped to it; blast radius near-zero, since durable backends
-    are async and callers use a provided backend). Finalize is one mechanical PR: workspace version bump,
-    `CHANGELOG.md`, publish the six crates, `release/0.2.0 → main` squash, tag. Async needs **no**
-    separate publish flip — it ships inside `pacta-contract` behind the `async` feature; the published
-    set is unchanged.
+  - **Shipped: `0.2.0`, `0.2.1`, and the `0.2.2` hardening.** `0.2.0` unified the sync/async bindings
+    on the transition port (breaking at the implementer surface only) and shipped the async binding
+    behind `pacta-contract`'s `async` feature; `0.2.1` reified `Middleware` composition
+    (`Identity`/`Stack`/`Composition`). `0.2.2` made the 0.2 backend-author contract *real*: the
+    reference `apply` locates by retainer, the facade doctest is a legal stateful backend (with an
+    additive `pacta::lifecycle` re-export), conformance gained concurrent claim/settlement contention
+    plus a runtime-compatible async entry (`run_async_with`) and a non-vacuous broken-fixture guard,
+    and the specs/rustdoc/READMEs were brought current — all additive/patch-compatible. Async needs
+    **no** separate publish flip — it ships inside `pacta-contract` behind the `async` feature; the
+    published set is unchanged.
   - **Deferred: drop the `Send + Sync` supertrait to fully deliver "coloring is the consumer's".**
     Both `Registry` and `AsyncRegistry` declare `: Send + Sync`, requiring every backend *type* to be
     thread-shareable — a mild runtime property the contract imposes, in tension with the brand's
@@ -197,16 +201,19 @@ proposal.
   owns the policy. Bounded retry for a poison pact stays deferred to the orchestration
   cluster (in-process middleware; cross-process via opaque operational metadata the
   core never interprets).
-- A settled pact need not persist (a pacta contract property).
+- A settled pact need not persist (a pacta contract property) — **folded in (0.2.2)**.
   The `lifecycle::State` enum carries a `Settled` variant and the reference backend keeps
   a settled pact in its store, but a real durable backend can represent "settled" by
   **removing the row** (it becomes trivially not-claimable, and `load` of it returns
   `None`) — a valid implementation of the only guarantee settlement owes ("a settled pact
   is not claimable again"). So the contract and specs must **not assume a settled pact
   persists**: `Settled` is the reference backend's representation, not a required storage
-  obligation. No contract change (removal already satisfies the guarantee); a spec-wording
-  clarity item to fold in when the async-binding specs are next touched, so a backend
-  author is not misled into persisting a settled state it would rather drop.
+  obligation. No contract change (removal already satisfies the guarantee). The clarity
+  item is now folded into the `lifecycle-persistence` spec, the `lifecycle::State` rustdoc,
+  and the backend-author docs, so a backend author is not misled into persisting a settled
+  state it would rather drop. The same 0.2.2 pass also stated `lifecycle::State`'s
+  closed-four-variant stability for the 0.2 series, so a backend author does not guess the
+  state set.
 - The lifecycle kernel models no heartbeat. Its directives are `Claim`, `Execute`,
   `Settle`, and `Idle` — there is no `Heartbeat` directive — so nothing in the pure
   decision machine ever extends a lease, and the reference `Driver` cannot heartbeat
@@ -264,7 +271,12 @@ proposal.
   settlement is exactly `Fulfilled | Breached`; the growing enums are `#[non_exhaustive]`.
   Opening `Outcome` later would be breaking and is not anticipated. Additive freeze work
   left for post-1.0 (safe because additive): `#[must_use]` on result types, serde/derive
-  additions, and `cargo-semver-checks` against the published 0.1.0 baseline from 0.1.1 on.
+  additions, and `cargo-semver-checks` against the published baseline. The 0.2.x line is a
+  **patch-compatible** series: through it the compose-level and backend-author faces stay
+  additively stable (a patch adds no breaking change), so `0.2.1 → 0.2.2` is additive API
+  plus fixes only — the stability statement is no longer only about 0.1.x. `lifecycle::State`
+  is a closed four-variant enum for the 0.2 series (a stability statement, not a freeze
+  against a later-minor evolution).
 - Packaging metadata has no governance teeth. The `release-packaging` requirements
   (crate-specific `readme`, `keywords`/`categories`, MSRV, the version-carrying
   dependency graph) are verified by prose review and tooling (`cargo publish --dry-run`,

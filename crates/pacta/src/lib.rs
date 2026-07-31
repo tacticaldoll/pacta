@@ -5,6 +5,10 @@
 //!
 //! - the lifecycle contract — [`Pact`], [`Claim`], [`Retainer`], [`Timestamp`],
 //!   [`Outcome`], [`Settlement`], and the [`Registry`] trait;
+//! - the backend-author surface — the [`Transition`] port and the colorless
+//!   [`lifecycle`] kernel ([`State`](lifecycle::State), the `on_X` transition
+//!   decisions, [`is_claimable`](lifecycle::is_claimable), and the lease arithmetic),
+//!   so a legal `Registry` is implementable from `pacta` alone;
 //! - execution composition — [`Executor`], [`Execution`], [`Middleware`], and the
 //!   composition mechanism [`Identity`], [`Stack`], and [`Composition`];
 //! - the runtime driver — [`Driver`], [`Step`], [`DriverError`].
@@ -21,10 +25,15 @@
 //! non-terminal `release` that makes a pact reclaimable again only at or after a
 //! consumer-supplied instant: it leases a [`Claim`], reclaims a lapsed lease through the
 //! normal claim path with a rotated [`Retainer`], rejects a heartbeat presented after
-//! expiry, and honors a reclaimable instant exactly as it honors injected time. This half
-//! is not merely described — it is *executably proven*: a backend runs the
-//! `pacta-conformance` suite (a dev-dependency) and passing it is what it means to
-//! satisfy the contract — the backend author's two-crate journey is implement
+//! expiry, and honors a reclaimable instant exactly as it honors injected time. Those five
+//! caller ops rest on three native primitives a backend actually implements: an atomic
+//! `claim` selection that admits only an eligible pact and rotates the retainer, a
+//! `lease_millis` accessor, and an atomic [`apply`](Registry::apply) transition port that
+//! loads the held state, runs the shared [`lifecycle`] decision, and stores the next state
+//! in one indivisible step — `heartbeat`, `fulfill`, `breach`, and `release` come as
+//! defaults over `apply`. This half is not merely described — it is *executably proven*: a
+//! backend runs the `pacta-conformance` suite (a dev-dependency) and passing it is what it
+//! means to satisfy the contract — the backend author's two-crate journey is implement
 //! `Registry` from `pacta`, then prove it with `pacta-conformance`. Durable backends
 //! live outside this workspace and prove themselves the same way.
 //!
@@ -47,58 +56,94 @@
 //! # Stability tiers
 //!
 //! This facade and the backend-author path are the **recommended** tier — the faces
-//! converging toward Pacta's long-term contract. The sans-I/O lifecycle kernel
-//! (`pacta_contract::kernel`) is the **advanced** tier: lower stability intent (its
-//! API may evolve as the runtime story settles), though still a supported, governed
-//! core surface — not unsupported or slated for removal. It is intentionally absent
-//! from this curated surface; reach for it through [`pacta-contract`](pacta_contract)
-//! directly only to build a custom runtime. Most consumers compose with [`Driver`]
-//! instead. (Tiers state *intent*; at 0.1.x SemVer holds every face unstable.)
+//! converging toward Pacta's long-term contract. The colorless [`lifecycle`] kernel is
+//! part of that recommended backend-author surface and is re-exported here. The sans-I/O
+//! *step-driver* kernel (`pacta_contract::kernel`) is the **advanced** tier: lower
+//! stability intent (its API may evolve as the runtime story settles), though still a
+//! supported, governed core surface — not unsupported or slated for removal. Only the
+//! step-driver kernel is intentionally absent from this curated surface; reach for it
+//! through [`pacta-contract`](pacta_contract) directly only to build a custom runtime.
+//! Most consumers compose with [`Driver`] instead. (Tiers state *intent*; through the
+//! 0.2.x patch line SemVer still holds the compose-level and backend-author faces
+//! additively stable — a patch adds no breaking change.)
 //!
 //! # Composing the lifecycle
 //!
 //! One mechanical step — claim, execute through a pass-through [`Middleware`], and
-//! settle — wired entirely through this entrypoint (backend and executor boilerplate
-//! hidden; run `cargo test` to see it execute):
+//! settle — wired entirely through this entrypoint over a *legal, stateful* backend that
+//! holds real [`lifecycle`] state and applies the transition atomically (nothing here is
+//! imported from outside `pacta`; run `cargo test` to see it execute):
 //!
 //! ```
-//! # use std::convert::Infallible;
-//! # use std::sync::Mutex;
-//! # use pacta::{Claim, Composition, Execution, Executor, Identity, Middleware, Outcome, Pact, Registry, Retainer, Timestamp, Transition};
-//! # struct Ledger { pending: Mutex<Option<Claim>> }
-//! # impl Registry for Ledger {
-//! #     type Error = Infallible;
-//! #     fn claim(&self, _d: &[&str], _n: Timestamp) -> Result<Option<Claim>, Infallible> {
-//! #         Ok(self.pending.lock().unwrap().take())
-//! #     }
-//! #     fn lease_millis(&self) -> u64 { 30_000 }
-//! #     // The one transition port; heartbeat/fulfill/breach/release come free as defaults.
-//! #     fn apply(&self, _r: &Retainer, _t: &Transition<'_>) -> Result<(), Infallible> { Ok(()) }
-//! # }
-//! # struct Performer;
-//! # impl Executor for Performer {
-//! #     type Error = Infallible;
-//! #     fn execute(&mut self, _e: Execution) -> Result<Outcome, Infallible> { Ok(Outcome::Fulfilled) }
-//! # }
-//! # let claim = Claim::new(
-//! #     Pact::new(Default::default(), "default".into(), "demo".into(), Vec::new()),
-//! #     Retainer::new(Default::default()),
-//! #     Timestamp::from_millis(0),
-//! # );
-//! use pacta::{Driver, Step};
+//! use std::sync::Mutex;
+//! use pacta::lifecycle::{self, State};
+//! use pacta::{
+//!     Claim, Composition, Driver, Execution, Executor, Identity, Middleware, Outcome, Pact,
+//!     Registry, Retainer, Step, Timestamp, Transition,
+//! };
 //!
-//! let ledger = Ledger { pending: Mutex::new(Some(claim)) };
+//! // A legal single-pact `Registry`, implemented with only the facade surface: it stores real
+//! // lifecycle state and applies the transition within one atomic (`Mutex`) scope.
+//! struct Ledger { lease_millis: u64, record: Mutex<(Pact, State)> }
+//!
+//! #[derive(Debug)]
+//! struct NotHeld;
+//! impl std::fmt::Display for NotHeld {
+//!     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("not held") }
+//! }
+//! impl std::error::Error for NotHeld {}
+//! impl From<lifecycle::NotCurrentHolder> for NotHeld {
+//!     fn from(_: lifecycle::NotCurrentHolder) -> Self { NotHeld }
+//! }
+//!
+//! impl Registry for Ledger {
+//!     type Error = NotHeld;
+//!     fn claim(&self, dockets: &[&str], now: Timestamp) -> Result<Option<Claim>, NotHeld> {
+//!         let mut record = self.record.lock().unwrap();
+//!         if !dockets.contains(&record.0.docket.as_str()) || !lifecycle::is_claimable(&record.1, now) {
+//!             return Ok(None);
+//!         }
+//!         let retainer = Retainer::new(Default::default());
+//!         record.1 = lifecycle::on_claim(&retainer, now, self.lease_millis);
+//!         Ok(Some(Claim::new(record.0.clone(), retainer, lifecycle::lease_expiry(now, self.lease_millis))))
+//!     }
+//!     fn lease_millis(&self) -> u64 { self.lease_millis }
+//!     // The one transition port: load the held state, run the shared decision, store it — atomically.
+//!     // heartbeat / fulfill / breach / release come free as defaults over this.
+//!     fn apply(&self, retainer: &Retainer, transition: &Transition<'_>) -> Result<(), NotHeld> {
+//!         let mut record = self.record.lock().unwrap();
+//!         match &record.1 {
+//!             State::Held { retainer: held, .. } if held == retainer => {
+//!                 record.1 = transition(&record.1)?;
+//!                 Ok(())
+//!             }
+//!             _ => Err(NotHeld),
+//!         }
+//!     }
+//! }
+//!
+//! struct Performer;
+//! impl Executor for Performer {
+//!     type Error = std::convert::Infallible;
+//!     fn execute(&mut self, _e: Execution) -> Result<Outcome, Self::Error> { Ok(Outcome::Fulfilled) }
+//! }
+//!
+//! let pact = Pact::new(Default::default(), "default".into(), "demo".into(), Vec::new());
+//! let ledger = Ledger { lease_millis: 30_000, record: Mutex::new((pact, State::Available)) };
 //! let performer = Composition::new().then(Identity).wrap(Performer); // compose, then wrap
 //! let mut driver = Driver::new(ledger, performer, ["default".to_string()]);
 //!
 //! assert_eq!(driver.step().unwrap(), Step::Fulfilled); // claim → execute → settle
+//!
+//! // The transition was really applied and persisted: the settled pact is no longer claimable.
+//! assert!(driver.registry().claim(&["default"], Timestamp::from_millis(0)).unwrap().is_none());
 //! ```
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
 pub use pacta_contract::{
-    Claim, Outcome, Pact, Registry, Retainer, Settlement, Timestamp, Transition,
+    Claim, Outcome, Pact, Registry, Retainer, Settlement, Timestamp, Transition, lifecycle,
 };
 pub use pacta_driver::{Driver, DriverError, Step};
 pub use pacta_executor::{Composition, Execution, Executor, Identity, Middleware, Stack};
