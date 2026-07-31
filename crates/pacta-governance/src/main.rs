@@ -14,6 +14,7 @@ const CONTRACT_REASON: &str = "pacta-contract is the isolated core contract. It 
 const EXECUTOR_REASON: &str = "pacta-executor owns the Pacta-native execution vocabulary. It may depend only on pacta-contract, never on drivers, adapters, backends, or external frameworks.";
 const DRIVER_REASON: &str = "pacta-driver is mechanical runtime glue. It may depend only on pacta-contract and pacta-executor, never on adapters, backends, or external frameworks.";
 const GOVERNANCE_REASON: &str = "the governance gate must stay independent of the graph it judges: depend only on tianheng, never on a workspace crate.";
+const KERNEL_ASYNC_REASON: &str = "the sans-I/O lifecycle kernel must stay runtime-agnostic: its public API must never expose an async fn, so no runtime shape leaks into the contract.";
 const PROSE_REASON: &str =
     "active prose must not reintroduce stale architecture-defining vocabulary";
 
@@ -105,6 +106,12 @@ fn constitution() -> Constitution {
             CrateBoundary::crate_("pacta-governance")
                 .restrict_dependencies_to(["tianheng"])
                 .because(GOVERNANCE_REASON),
+        )
+        .async_exposure_boundary(
+            AsyncExposureBoundary::in_crate("pacta-contract")
+                .module("crate::kernel")
+                .must_not_expose_async_fn()
+                .because(KERNEL_ASYNC_REASON),
         )
 }
 
