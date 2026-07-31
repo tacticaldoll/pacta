@@ -205,7 +205,19 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
     conformance-tested semantic — and reclaim-fence is arguably the better design (it salvages
     genuinely-done work rather than redundantly requeuing it). If reclaim-fence is ever
     reconsidered, that is a separate claim-authority case, never smuggled into the async work.
-  - **Fence reconciliation — a NAMED go/no-go, decide *before* worklane rebinds, not during.**
+  - **Fence reconciliation — RESOLVED (2026-07-16): move 2, worklane adopts reclaim-fence.**
+    The go/no-go (below) was decided: **worklane adopts pacta's reclaim-fence**, as an explicit,
+    conscious *promise change* (its `ack-on-expired` shifts from `StaleReservation`→redeliver to
+    a direct settle) with **worklane's own conformance updated** to match — not smuggled. Chosen
+    because reclaim-fence is the better design (lazy vs eager invalidation: no redundant redelivery
+    when uncontended, same at-least-once safety), and because it *preserves the single-source
+    drift-prevention* that move 3 (driver override) would forfeit and that move 1 (pacta yields)
+    would abandon while breaking a published contract. **pacta changes nothing** — it keeps its
+    shipped reclaim-fence; the change is worklane's to enact at rebind. The safe-improvement
+    framing holds: end-state identical (the pact settles), just one fewer redundant redelivery, so
+    at-least-once + idempotent consumers are unaffected. (Flip to move 3 only if a worklane user is
+    found to depend on strict `expired-lease ⇒ redelivery` as an observable guarantee — none known.)
+  - **Fence reconciliation — the named go/no-go (now resolved above).**
     A three-pass audit established this is not a tweak: the fence is *deliberate and
     conformance-locked on both sides*, and the divergence is **backend-uniform** — worklane
     fences on lease expiry in postgres (`ack DELETE … leased_until > now`), sqlite (the guarded
