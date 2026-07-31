@@ -1,7 +1,7 @@
 # lifecycle-persistence Specification
 
 ## Purpose
-TBD - created by archiving change establish-lease-lifecycle. Update Purpose after archive.
+Define Pacta's claim lease lifecycle: a bounded lease decided from injected time, lapse recovery through the normal claim path with a rotated retainer, a heartbeat that cannot revive an expired lease, and at-least-once recovery paired with the idempotent-`Executor` obligation — mechanism, never retry/backoff policy.
 ## Requirements
 ### Requirement: Claim Lease Model
 A claimed pact SHALL be held under a lease: a bounded validity window during which

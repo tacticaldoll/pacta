@@ -4,12 +4,16 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0]
+## [0.1.0] - 2026-07-12
 
 First public release: the thin lifecycle foundation, not a complete durable runtime.
 
 ### Added
 
+- **Curated facade** (`pacta`): the recommended single entrypoint — a pure
+  re-export crate that composes the contract, executor, and driver surface, carries
+  no logic of its own, excludes the sans-I/O kernel, and proves end-to-end lifecycle
+  composition with a crate-root doctest.
 - **Lifecycle contract** (`pacta-contract`): the isolated core — `Pact`, `Claim`,
   `Retainer`, `Timestamp`, `Outcome`/`Settlement`, and the `Registry` trait
   (`claim`, `heartbeat`, `fulfill`, `breach`). Depends only on `serde` and `uuid`.
