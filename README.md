@@ -10,8 +10,27 @@ execution composition, registry persistence, and integrations as governed
 patterns.
 
 ```text
-Signal -> Pact -> Claim -> Execution -> Settlement
+(Signal) -> Pact -> Claim -> Execution -> Settlement
 ```
+
+`Signal -> Pact` is user-provided ingress: you turn your own events into pacts.
+Pacta ships the lifecycle from `Pact` onward, not an ingress API.
+
+## Status (0.1.0)
+
+0.1.0 is the thin lifecycle foundation, not a complete durable runtime. It ships:
+
+- the lifecycle **contract** (`Registry`) and a sans-I/O lifecycle **kernel**;
+- **lease/lapse** semantics with injected time (the core reads no ambient clock);
+- execution **composition** vocabulary (`Executor`, `Middleware`, `Policy`);
+- a mechanical **driver** that runs the kernel against a registry and executor;
+- an in-memory **reference backend** (`pacta-memory`);
+- a backend-agnostic **conformance** suite (`pacta-conformance`);
+- **executable governance** enforcing the architecture.
+
+Durable/persistent backends deliberately live **outside** this workspace and prove
+themselves against the conformance suite. No ingress API, framework adapters, or
+retry/backoff/timeout orchestration ship in 0.1.0 — see `CHANGELOG.md`.
 
 ## Why Pacta
 

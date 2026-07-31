@@ -2,9 +2,14 @@
 name = "pacta-contract"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
 description = "The isolated core contract for the Pacta task runtime."
-publish = false
+publish.workspace = true
 
 [dependencies]
 serde.workspace = true
