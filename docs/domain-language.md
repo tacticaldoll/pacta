@@ -36,6 +36,10 @@ generic queue-runtime behavior.
 - `Settlement` - the lifecycle conclusion applied to a claim, currently fulfill
   or breach.
 - `Middleware` - Pacta-native execution composition around an executor. It acts as a decorator without framework concepts like readiness or generic requests.
+- `Policy` - a user-implemented decision for infrastructure-failure disposition: whether a
+  failed execution should keep lapsing (to be reclaimed and attempted again) or concede as a
+  terminal breach. It has no bearing on a clean business `Outcome`.
+- `Verdict` - the two-way decision a `Policy` renders: `Continue` or `Concede`.
 - `lifecycle` - the pure, colorless, sans-I/O state machine that owns the lifecycle
   semantics (eligibility, transitions, the holder authority check, and lease
   arithmetic); every `Registry` backend composes over it so the semantics cannot drift.
