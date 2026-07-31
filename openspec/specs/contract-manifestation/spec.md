@@ -44,8 +44,8 @@ consumer does not mistake a reference for a production component.
 - **THEN** it states that `pacta-memory` is an in-memory reference backend, not a durable or production backend, and that durable backends live outside the workspace and prove themselves against `pacta-conformance`
 
 #### Scenario: The async reference backend is named
-- **WHEN** a consumer reads the `pacta-memory-async` documentation
-- **THEN** it states that `pacta-memory-async` is the in-memory reference backend for the async binding, not a durable or production backend, and that durable async backends live outside the workspace and prove themselves the same way
+- **WHEN** a consumer reads the documentation of the async reference backend (`MemoryRegistryAsync` in `pacta-memory`, behind the `async` feature)
+- **THEN** it states that it is the in-memory reference backend for the async binding, not a durable or production backend, and that durable async backends live outside the workspace and prove themselves the same way
 
 #### Scenario: The reference runtime states its boundary
 - **WHEN** a consumer reads the `Driver` documentation
