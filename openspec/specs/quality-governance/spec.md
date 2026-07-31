@@ -4,9 +4,7 @@
 
 Define Pacta's executable quality gates for CI, Rust style, supply-chain policy,
 and Tianheng architectural reactions.
-
 ## Requirements
-
 ### Requirement: Definition Of Done CI
 Pacta SHALL run its Definition of Done in GitHub Actions for push and pull request events.
 
@@ -108,3 +106,20 @@ Pacta SHALL keep new runtime crates covered by executable quality and architectu
 #### Scenario: Runtime dependencies stay closed
 - **WHEN** core runtime crates require normal dependencies
 - **THEN** each allowed dependency is declared in the Tianheng constitution for that crate
+
+### Requirement: Core Reads No Ambient Time
+The `pacta-contract` core SHALL NOT read an ambient wall clock. An executable
+governance check SHALL reject ambient current-time reads in the core, so the
+injected-time discipline is enforced rather than merely documented.
+
+#### Scenario: An ambient clock read in the core fails governance
+- **WHEN** `pacta-contract` source acquires the current time from an ambient
+  clock such as a `now()` call
+- **THEN** the governance check fails
+
+#### Scenario: Runtime clock reads outside the core are allowed
+- **WHEN** a runtime crate such as `pacta-driver` reads the current time to inject
+  it into registry operations
+- **THEN** the governance check does not reject it, because the prohibition scopes
+  to the core contract
+
