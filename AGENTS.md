@@ -1,80 +1,38 @@
 # AGENTS.md
 
-Meta-guideline for any AI coding agent working in this repository. Read this
-first.
+Meta-guideline for any AI coding agent working in this repository. **Read this first.**
 
-## This Project Uses OpenSpec
+## The Three Architectural Axioms (Coding Style)
 
-The source of truth lives in `openspec/`, which is version-controlled and
-agent-agnostic.
+`Pacta` is a Tower-native, Middleware-driven task runtime. It operates under a strict minimalist philosophy, contrasting heavily with legacy job queues that bloat their storage layers. Before proposing or writing any code, internalize these axioms:
 
-- `openspec/specs/` - the living specification of what the system currently is.
-- `openspec/changes/` - active change proposals as delta specs.
-- `openspec/changes/archive/` - completed changes.
+1. **Zero-Dependency Contract**: The `pacta-contract` crate is the sole source of truth. It defines the `Store` trait and the `Pact` envelope. It must NEVER depend on business logic crates (e.g., `tokio`, `tower`, routing logic). It is purely a data and state interface.
+2. **Pure State Machine (Store is Lifecycle)**: The `Store` manages only four actions: `reserve`, `ack`, `nack`, and `heartbeat`. Concepts like retry attempts, visibility delay, topic routing, cron scheduling, and dead-letter payloads are strictly forbidden from the `Store` trait and the `Pact` struct. The Store does not do business logic.
+3. **Execution is Composition**: All execution orchestration must be implemented as `&self` Middleware layers. Retries, timeouts, rate limiting, and observability belong in the Handler stack, entirely decoupled from the Store. 
 
-Per-agent command files such as `.codex/`, `.claude/`, and editor-specific shims
-are per-clone generated files and are not committed. After cloning, generate
-your own with:
+## Adversarial Review Stance
 
-```bash
-openspec init --tools codex
-# or: openspec init --tools claude,cursor,github-copilot
-```
+When reading proposals or reviewing code, adopt an adversarial stance. You must actively challenge the design:
+- **Propose Phase**: Does this proposal leak business logic into the Store? Could this be solved purely with a Middleware layer instead? If a feature violates the three axioms, it must be rejected or redesigned as a Middleware.
+- **Apply Phase**: Does the implementation bloat the core schema? Have we maintained absolute zero-dependency isolation in the contract? Assume the code is bloating the system until proven otherwise.
 
-## Workflow
+## OpenSpec Workflow
 
-Follow this lifecycle:
+This repository uses OpenSpec. The source of truth lives in `openspec/specs/`, while active changes live in `openspec/changes/`.
 
+Follow this exact lifecycle:
 ```text
 explore -> propose -> apply -> sync -> archive
 ```
-
-1. **Explore**: think and investigate only. Do not write feature code outside of
-   a change.
-2. **Propose**: create a change with `proposal.md`, `design.md`, `tasks.md`, and
-   delta specs.
-3. **Apply**: implement tasks one at a time, checking each off in `tasks.md`
-   only after verification.
+1. **Explore**: think and investigate. Do not write feature code outside of a change.
+2. **Propose**: create a change with `proposal.md`, `design.md`, `tasks.md`, and delta specs. (Subject to Adversarial Review).
+3. **Apply**: implement tasks one at a time, checking each off in `tasks.md` only after verification. (Subject to Adversarial Review).
 4. **Sync**: merge verified delta specs back into `openspec/specs/`.
-5. **Archive**: move the completed change to
-   `openspec/changes/archive/YYYY-MM-DD-<name>/`.
+5. **Archive**: move the completed change to `openspec/changes/archive/YYYY-MM-DD-<name>/`.
 
-## OpenSpec CLI
+## Commits (Strict Discipline)
 
-If your agent has no OpenSpec slash commands, use the CLI:
-
-```bash
-openspec list [--json] [--specs]
-openspec new change "<name>"
-openspec status --change "<name>" --json
-openspec instructions <artifact> --change "<name>"
-openspec archive <name>
-```
-
-## Rules
-
-- Before implementing anything, read the relevant files in `openspec/specs/` and
-  the active change's artifacts.
-- Do not write feature code without an active change proposal that contains
-  tasks.
-- Keep changes minimal and scoped to the task being implemented.
-- Treat `openspec/specs/` as the truth. Reflect requirement changes there via
-  the sync step, not by editing code silently.
-- Keep project-specific contract, terms, and priorities in `PROJECT.md`.
-
-## Language
-
-- Write OpenSpec artifacts, ADRs, code comments, and commit messages in English.
-- Converse with users in the language they use.
-
-## Commits
-
-Use Conventional Commits:
-
-```text
-type(scope): summary
-```
-
+Use Conventional Commits: `type(scope): summary`
 Use lowercase imperative mood and keep the summary at 72 characters or fewer.
 Common types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `build`,
 `ci`.
@@ -131,29 +89,26 @@ Common types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `build`,
 - Push the annotated tag without creating another commit. A release branch and
   an empty release commit are not part of the release flow.
 
-### Commit Flow
-
+**Commit Flow (must match OpenSpec lifecycle):**
 - **Propose**: `docs(<change>): propose <summary>`
-- **Apply**: `feat(<change>): <summary>` or `fix(<change>): <summary>`
+- **Apply**: `feat(<change>): <summary>` or `fix(<change>): <summary>`. Implement against the change's delta specs. Commit per coherent compiling milestone, NOT per checkbox.
 - **Sync**: `docs(specs): sync <change>`
 - **Archive**: `chore(openspec): archive <change>`
 
-Never bundle unrelated changes into one commit.
+**Absolute Rules:**
+- Write commit messages in English.
+- No AI or tool signatures: No `Co-Authored-By`, no "Generated with". 
+- No PR or issue numbers (`#123`) in commit messages. The history must read as a human-authored engineering record.
+- `release: X.Y.Z` is a reserved commit subject used only for release commits on `main`.
 
 ## Definition Of Done
 
-Run these from the workspace root before checking off a task, syncing specs, or
-archiving a change:
+Run these from the workspace root before checking off a task, syncing specs, or archiving a change:
 
 ```bash
-cargo build
-cargo test
+cargo build --workspace
+cargo test --workspace
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
+cargo run -p pacta-governance -- check --manifest-path Cargo.toml
 ```
-
-Before the first real crate exists, these Rust commands are not yet meaningful.
-The first project-specific OpenSpec change should add the real crate layout and
-make the Definition of Done runnable from the workspace root.
-
-If a command cannot run in the current environment, report that explicitly.

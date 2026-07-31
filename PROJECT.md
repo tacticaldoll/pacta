@@ -1,51 +1,31 @@
 # Project Contract
 
-Fill this file in during the first project-specific OpenSpec change. Keep it
-short and concrete; it is the orientation layer for humans and AI agents.
-
 ## Purpose
 
-Describe what this project is for in one or two paragraphs.
+Pacta is a Tower-native, Middleware-driven task runtime for Rust. It is designed to act as an ultra-minimalist job queue that delegates all execution orchestration (retries, timeouts, rate limiting, routing) to the Middleware ecosystem. 
+
+By stripping business logic from the storage layer, Pacta enables flawless backend substitutability, massive concurrency (via `&self` Handlers), and out-of-the-box event replay capabilities.
 
 ## Core Contract
 
-Name the behavior that must be protected first. Examples:
-
-- a data lifecycle that must never lose or duplicate information
-- a protocol compatibility promise
-- a user-facing workflow that must remain coherent
-- a security or privacy invariant
+The behavior that must be protected at all costs:
+- **Storage Purity**: The `Store` is a pure state machine (`reserve`, `ack`, `nack`, `heartbeat`). It never computes exponential backoff, never manages visibility delays, and never inspects payloads.
+- **Handler Isolation**: Execution is entirely isolated into Middleware stacks.
 
 ## Terminology
 
-Define project-specific terms here. Prefer one canonical term over synonyms.
-
-## First Project Change
-
-Start each derived project with an OpenSpec change named
-`initial-project-shape` unless a more specific first change is clearer.
-
-That change should:
-
-- replace placeholder project metadata
-- define the first project-specific specs
-- choose the crate layout
-- add the real Rust crate or crates
-- make the Rust Definition of Done runnable from the workspace root
-
-Before the first real crate exists, Rust build, test, lint, and format commands
-are not yet a meaningful Definition of Done. The first project-specific change
-is responsible for making them meaningful.
+- **Signal**: A short-lived external trigger (e.g., an HTTP request or a Cron tick).
+- **Pact**: A durable command or contract, generated from a Signal, ready to be executed.
+- **Store**: The pure state machine tracking the lifecycle of Pacts.
+- **Driver**: The runtime loop that fetches Pacts from the Store and feeds them into the Handler.
+- **Handler**: The Middleware stack responsible for executing the Pact.
+- **Reservation**: The lease held by the Driver over a Pact while it is being executed.
 
 ## Change Prioritization
 
-When comparing possible changes, prefer the one that protects the core contract
-earliest:
+When comparing possible changes, prefer the one that protects the core contract earliest:
 
-1. Correctness, data integrity, lifecycle safety, and security foundations.
-2. Specified feature completeness for concepts already declared in OpenSpec.
-3. Operator and developer ergonomics.
-4. Scale-out, integrations, and optional platform features.
-
-Do not add scale-out or integration scope merely because a correctness change
-enables it. Keep enabling contract changes separate and small.
+1. Correctness, data integrity, and strict adherence to the Three Axioms.
+2. Specified feature completeness for the Middleware ecosystem.
+3. Operator observability (tracing, dead-letter storage).
+4. Scale-out and new `Store` backend integrations.
