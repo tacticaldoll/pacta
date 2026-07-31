@@ -1,6 +1,11 @@
 //! An in-memory [`Registry`] backend with real lease and lapse semantics.
 //!
-//! This is the first concrete backend: a pure lifecycle state machine that holds
+//! This is a **reference** backend, not a durable or production one: it holds pacts
+//! in memory, so nothing survives the process. It exists to demonstrate correct
+//! lifecycle semantics and to calibrate against — durable backends live outside this
+//! workspace and prove themselves against `pacta-conformance` just as this one does.
+//!
+//! It is a pure lifecycle state machine that holds
 //! pacts, leases claims for a user-supplied duration, reclaims lapsed pacts through
 //! the normal claim path, and rotates the retainer on every claim so a stale holder
 //! cannot settle. It reads no clock — time is injected into `claim` and `heartbeat`.
