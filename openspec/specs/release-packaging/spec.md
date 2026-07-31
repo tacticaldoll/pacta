@@ -1,7 +1,7 @@
 # release-packaging Specification
 
 ## Purpose
-TBD - created by archiving change prepare-release-hygiene. Update Purpose after archive.
+Define Pacta's crates.io release hygiene: the publishable crate set (with the governance gate unpublished), a version-carrying inter-member dependency graph, required crate metadata, a declared and CI-verified MSRV, an honest changelog, and a release scope the README states without overstating ingress or durability.
 ## Requirements
 ### Requirement: Publishable Crate Set
 Pacta SHALL declare an explicit publishable crate set for crates.io. The crates
@@ -75,3 +75,4 @@ that are not part of the release.
 #### Scenario: Ingress is not overstated
 - **WHEN** the README depicts the lifecycle flow
 - **THEN** it does not present a `Signal`-to-`Pact` ingress as a shipped public API, because no ingress API is part of the release
+

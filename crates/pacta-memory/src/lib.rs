@@ -110,11 +110,11 @@ impl Registry for MemoryRegistry {
             retainer: retainer.id(),
             expiry,
         };
-        Ok(Some(Claim {
-            pact: records[index].pact.clone(),
+        Ok(Some(Claim::new(
+            records[index].pact.clone(),
             retainer,
-            lease_expiry: expiry,
-        }))
+            expiry,
+        )))
     }
 
     fn heartbeat(&self, retainer: &Retainer, now: Timestamp) -> Result<(), Self::Error> {

@@ -5,7 +5,7 @@
 //!
 //! - the lifecycle contract — [`Pact`], [`Claim`], [`Retainer`], [`Timestamp`],
 //!   [`Outcome`], [`Settlement`], and the [`Registry`] trait;
-//! - execution composition — [`Executor`], [`Execution`], [`Middleware`], [`Policy`];
+//! - execution composition — [`Executor`], [`Execution`], [`Middleware`];
 //! - the runtime driver — [`Driver`], [`Step`], [`DriverError`].
 //!
 //! It carries no logic of its own: every item here is a re-export.
@@ -87,11 +87,11 @@
 //! #     type Executor = Witnessed<E>;
 //! #     fn wrap(&self, inner: E) -> Witnessed<E> { Witnessed { inner } }
 //! # }
-//! # let claim = Claim {
-//! #     pact: Pact { id: Default::default(), docket: "default".into(), kind: "demo".into(), clause: Vec::new() },
-//! #     retainer: Retainer::new(Default::default()),
-//! #     lease_expiry: Timestamp::from_millis(0),
-//! # };
+//! # let claim = Claim::new(
+//! #     Pact::new(Default::default(), "default".into(), "demo".into(), Vec::new()),
+//! #     Retainer::new(Default::default()),
+//! #     Timestamp::from_millis(0),
+//! # );
 //! use pacta::{Driver, Step};
 //!
 //! let ledger = Ledger { pending: Mutex::new(Some(claim)) };
@@ -106,4 +106,4 @@
 
 pub use pacta_contract::{Claim, Outcome, Pact, Registry, Retainer, Settlement, Timestamp};
 pub use pacta_driver::{Driver, DriverError, Step};
-pub use pacta_executor::{Execution, Executor, Middleware, Policy};
+pub use pacta_executor::{Execution, Executor, Middleware};
