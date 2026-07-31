@@ -16,8 +16,12 @@ Pacta SHALL expose an executor abstraction using Pacta runtime vocabulary rather
 - **THEN** they use `Executor`
 
 #### Scenario: Execution result uses Pacta vocabulary
-- **WHEN** an executor reports the result of handling a pact
+- **WHEN** an executor reports the lifecycle result of handling a pact
 - **THEN** the result is expressed as an `Outcome` or `Settlement` rather than a Tower response type
+
+#### Scenario: Executor infrastructure errors are distinct
+- **WHEN** an executor cannot report a lifecycle outcome because execution infrastructure fails
+- **THEN** the failure is represented as the executor error rather than being collapsed into `Outcome::Breached`
 
 #### Scenario: Tower stays outside the core executor
 - **WHEN** the core executor crate is compiled
@@ -31,12 +35,16 @@ Pacta SHALL provide a driver skeleton that mechanically composes a `Registry` wi
 - **THEN** it claims a pact from the configured dockets through `Registry::claim`
 
 #### Scenario: Driver fulfills successful execution
-- **WHEN** executor execution succeeds
+- **WHEN** executor execution reports `Outcome::Fulfilled`
 - **THEN** the driver settles the claim with `Registry::fulfill`
 
 #### Scenario: Driver breaches failed execution
-- **WHEN** executor execution fails
+- **WHEN** executor execution reports `Outcome::Breached`
 - **THEN** the driver settles the claim with `Registry::breach`
+
+#### Scenario: Driver surfaces executor infrastructure error
+- **WHEN** executor execution returns an executor error
+- **THEN** the driver attempts to settle the claim with `Registry::breach` and returns an executor error to the caller
 
 #### Scenario: Empty docket is idle
 - **WHEN** the registry returns no claim

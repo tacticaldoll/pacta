@@ -31,6 +31,9 @@ the concept is part of Pacta's public model.
 - `Outcome` - the executor's result for an execution.
 - `Settlement` - the lifecycle conclusion applied to a claim, currently fulfill
   or breach.
+- `Middleware` - Pacta-native execution composition around an executor.
+- `Policy` - Pacta-native orchestration rule such as retry, timeout, or rate
+  limiting.
 - `Driver` - a mechanical runtime-loop term for polling a registry and driving
   execution. Use it when discussing implementation mechanics, not as the main
   public role.
@@ -43,7 +46,7 @@ as driver, heartbeat, retry, timeout, scheduler, or middleware when those terms
 make behavior clearer.
 
 Tower is an adapter target, not Pacta's core public identity. Tower vocabulary
-belongs in adapter crates or features, not in the first-layer runtime API.
+belongs in adapter-owned crates, not in the first-layer runtime API.
 
 ## Legacy Mapping
 
