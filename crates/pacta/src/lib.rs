@@ -17,10 +17,10 @@
 //!
 //! **What a backend must do (the implementer half).** A [`Registry`] provides the
 //! `claim` → `heartbeat` → `fulfill` / `breach` lifecycle over a bounded lease, plus a
-//! non-terminal `release` that re-arms a pact to be claimable again only at or after a
+//! non-terminal `release` that makes a pact reclaimable again only at or after a
 //! consumer-supplied instant: it leases a [`Claim`], reclaims a lapsed lease through the
 //! normal claim path with a rotated [`Retainer`], rejects a heartbeat presented after
-//! expiry, and honors a re-arm instant exactly as it honors injected time. This half
+//! expiry, and honors a reclaimable instant exactly as it honors injected time. This half
 //! is not merely described — it is *executably proven*: a backend runs the
 //! `pacta-conformance` suite (a dev-dependency) and passing it is what it means to
 //! satisfy the contract — the backend author's two-crate journey is implement

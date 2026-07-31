@@ -56,9 +56,9 @@ where
     late_fulfill_before_reclaim_succeeds(&make);
     fulfill_settles_and_pact_not_claimable(&make);
     breach_settles_terminally(&make);
-    released_pact_withheld_until_rearm(&make);
-    released_pact_reclaimable_at_rearm(&make);
-    immediate_rearm_reclaims_like_lapse(&make);
+    released_pact_withheld_until_reclaimable(&make);
+    released_pact_reclaimable_at_its_instant(&make);
+    immediate_reclaim_reclaims_like_lapse(&make);
     release_rotates_authority_from_prior_holder(&make);
     heartbeat_extends_lease_preventing_lapse(&make);
     heartbeat_on_lapsed_lease_rejected(&make);
@@ -262,7 +262,7 @@ where
     );
 }
 
-fn released_pact_withheld_until_rearm<R, F>(make: &F)
+fn released_pact_withheld_until_reclaimable<R, F>(make: &F)
 where
     R: Registry,
     R::Error: Debug,
@@ -277,17 +277,17 @@ where
         .release(&claim.retainer, at(5000))
         .expect("release should succeed for the current holder");
     // at(3000) is past the original lease (1000) — a lapse would make it claimable —
-    // but the re-arm instant (5000) is later, so release must withhold it.
+    // but the reclaimable instant (5000) is later, so release must withhold it.
     assert!(
         registry
             .claim(&[DOCKET], at(3000))
             .expect("claim should not error")
             .is_none(),
-        "a released pact must not be claimable before its re-arm instant"
+        "a released pact must not be claimable before its reclaimable instant"
     );
 }
 
-fn released_pact_reclaimable_at_rearm<R, F>(make: &F)
+fn released_pact_reclaimable_at_its_instant<R, F>(make: &F)
 where
     R: Registry,
     R::Error: Debug,
@@ -304,7 +304,7 @@ where
     let second = registry
         .claim(&[DOCKET], at(5000))
         .expect("claim should not error")
-        .expect("a released pact must be claimable at its re-arm instant");
+        .expect("a released pact must be claimable at its reclaimable instant");
     assert_ne!(
         first.retainer.id(),
         second.retainer.id(),
@@ -312,7 +312,7 @@ where
     );
 }
 
-fn immediate_rearm_reclaims_like_lapse<R, F>(make: &F)
+fn immediate_reclaim_reclaims_like_lapse<R, F>(make: &F)
 where
     R: Registry,
     R::Error: Debug,
@@ -325,13 +325,13 @@ where
         .expect("a pact should be claimable");
     registry
         .release(&claim.retainer, at(0))
-        .expect("release with an immediate re-arm should succeed");
+        .expect("release with an immediate reclaim should succeed");
     assert!(
         registry
             .claim(&[DOCKET], at(0))
             .expect("claim should not error")
             .is_some(),
-        "an immediate re-arm must make the pact claimable at once, as a voluntary lapse"
+        "an immediate reclaim must make the pact claimable at once, as a voluntary lapse"
     );
 }
 
