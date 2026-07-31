@@ -207,7 +207,7 @@ mod tests {
     }
 
     /// The sync reference backend upholds at-most-once authority under real concurrent claim and
-    /// settlement contention, through the shared portable check.
+    /// settlement contention, through the shared sync contention check (OS threads).
     #[test]
     fn passes_sync_contention() {
         pacta_conformance::run_contention(MemoryRegistry::seeded);
@@ -331,8 +331,10 @@ mod tests {
             .expect("the held state was untouched, so the holder still settles");
     }
 
-    /// The at-most-once invariant under concurrent contention, through the shared *portable* runner
-    /// — the exact check any async backend runs, driven by OS threads and `block_on` (no runtime).
+    /// The at-most-once invariant under concurrent contention for this **ready-future** backend,
+    /// through the shared `run_async_contention` check (OS threads + no-op-waker `block_on`, no
+    /// runtime). A real-reactor backend cannot use this ready-future runner; it drives its own
+    /// contention verification, and runs the sequential scenarios via `run_async_with`.
     #[cfg(feature = "async")]
     #[test]
     fn passes_async_contention() {

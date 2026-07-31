@@ -99,8 +99,10 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
   behaves identically. `AsyncRegistry` and the optional `apply_via_cas` helper live behind
   `pacta-contract`'s `async` feature (native AFIT, `Send`-agnostic); `MemoryRegistryAsync` is the
   reference backend in `pacta-memory`, over the same private store as `MemoryRegistry`;
-  `pacta-conformance` has a feature-gated async runner (parity via `run_async`) and a portable
-  contention check (`run_async_contention`). A sync-only consumer that does not enable `async` compiles
+  `pacta-conformance` has a feature-gated async runner — `run_async_with` (reactor-compatible: a
+  real-reactor backend drives the shared sequential scenarios on its own runtime via a
+  `BlockingDriver`) and `run_async` (the ready-future convenience) — plus `run_async_contention`, a
+  **ready-future-only** contention check. A sync-only consumer that does not enable `async` compiles
   none of it.
   - **Positioning:** sans-I/O purity lives in a **colorless kernel + conformance**, not in the calling
     convention. `Registry` is an I/O **port**; sync and async are two bindings of one shape — a native
@@ -122,9 +124,12 @@ Shared conformance tests, backend-agnostic correctness checks, and an in-memory
     `pacta-conformance::heartbeat_at_expiry_boundary_succeeds` (0.2.2), so the fence's `>=` edge is
     pinned as well as its after-expiry rejection.
   - **Conformance is the proof.** The async runner adapts an `AsyncRegistry` into the sync suite via a
-    `block_on`, running the existing scenario bodies verbatim (one scenario set, no drift — state-machine
-    parity); the at-most-once invariant under real contention is the portable `run_async_contention`
-    (OS threads + `block_on`, no async runtime) that any async backend runs. Correctness is self-proven
+    `BlockingDriver`, running the existing scenario bodies verbatim (one scenario set, no drift —
+    state-machine parity): `run_async_with` drives them on a caller-supplied runtime (reactor-compatible)
+    and `run_async` uses the built-in poll-based driver (ready-future backends). The at-most-once
+    invariant under real contention is `run_async_contention` (OS threads + no-op-waker `block_on`, no
+    async runtime), a **ready-future-only** check — a real-reactor backend drives its own contention
+    verification today, or awaits a future driver-aware contention entry. Correctness is self-proven
     against the reference backend, on pacta's own authority — never gated on a downstream consumer (spec:
     `product-positioning` "Correctness Is Conformance-Self-Proven"). Backend throughput is consumer-owned
     edge, not a pacta gate.

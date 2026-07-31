@@ -210,8 +210,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::Pact;
+    // Explicit imports rather than a `use super::*` glob: the core's `uuid` ambient-time reaction
+    // resolves symbol paths and cannot confine a glob, so naming what the tests use keeps the
+    // reaction precise now that `Uuid` is re-exported at the crate root.
+    use super::{AsyncRegistry, apply_via_cas};
+    use crate::lifecycle::{self, State};
+    use crate::{Claim, Pact, Retainer, Timestamp, Transition};
     use std::sync::Mutex;
     use uuid::Uuid;
 
