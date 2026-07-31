@@ -55,13 +55,12 @@
 //!   constant.
 //! - **Runtime-owned heartbeat cadence.** Long work must [`heartbeat`](AsyncRegistry::heartbeat)
 //!   before its lease lapses; when and how often is the runtime's policy.
-//! - **Future coloring is yours.** This binding is deliberately `Send`-agnostic *at its futures*: it
-//!   forces no `Send` bound on the futures its methods return and pulls no runtime. Async and executor
-//!   choice are the consumer's to compose — a multi-threaded executor requires `Send` futures, which
-//!   the consumer satisfies at its own call site over a concrete backend. The one runtime-ish
-//!   requirement the contract *does* impose is that a backend **type** be `Send + Sync`
-//!   (thread-shareable) — a requirement of both the sync and async bindings, distinct from the
-//!   futures' coloring.
+//! - **Backend and future coloring are yours.** This binding forces neither `Send + Sync` on the
+//!   backend type nor `Send` on the futures its methods return, and it pulls no runtime. A
+//!   single-threaded backend may stay local. A caller using a multi-threaded executor or sharing a
+//!   registry across threads adds the backend and future bounds that concrete use requires. This is
+//!   distinct from [`Transition`](crate::Transition) remaining `Send + Sync`: that bound applies to
+//!   the pure decision closure, not the backend type or future.
 //!
 //! Note the fence rule this binding inherits from the frozen contract: a holder whose lease has
 //! lapsed but whose pact **no one has reclaimed** can still settle (its retainer is still the
@@ -84,7 +83,12 @@ use crate::{Claim, Retainer, Timestamp, Transition};
 /// Backends implement the two primitives ([`claim`](Self::claim), [`apply`](Self::apply)) and the
 /// [`lease_millis`](Self::lease_millis) accessor; the four transition operations are provided as
 /// default methods composing over [`crate::lifecycle`] through [`apply`](Self::apply).
-pub trait AsyncRegistry: Send + Sync {
+///
+/// The backend type itself need not be [`Send`] or [`Sync`], and the method futures carry no
+/// binding-imposed `Send` requirement. A caller that moves or shares an async registry across
+/// threads adds `Send + Sync` at that boundary; generic code must not treat those bounds as implied
+/// by `R: AsyncRegistry`. The pure [`Transition`] closure remains `Send + Sync` independently.
+pub trait AsyncRegistry {
     /// Error returned by the backend. It must be able to represent a lost/absent authority, so
     /// the shared kernel's [`lifecycle::NotCurrentHolder`] converts into it.
     type Error: std::error::Error + Send + Sync + 'static + From<lifecycle::NotCurrentHolder>;

@@ -304,3 +304,33 @@ runtime coloring.
 #### Scenario: Optimistic compare-and-set is not mandated
 - **WHEN** a backend has a transaction or a lock available
 - **THEN** it implements `apply` with that native atomic scope and is not required to use compare-and-set, because the contract fixes the decision but not the concurrency-control mechanism
+
+### Requirement: Registry Backend Types Are Coloring-Agnostic
+Pacta SHALL NOT require the backend type of either the synchronous `Registry`
+binding or the asynchronous `AsyncRegistry` binding to implement `Send` or `Sync`.
+Backend thread shareability SHALL be selected by the consumer and required by the
+caller or tool that actually crosses thread boundaries. This relaxation SHALL NOT
+change claim or transition atomicity, lifecycle semantics, the five caller-facing
+operations, or the shared `Transition` port.
+
+#### Scenario: A single-threaded sync backend implements Registry
+- **WHEN** a backend stores its state in a deliberately `!Send`/`!Sync`
+  single-threaded representation
+- **THEN** it can implement `Registry` and use the five lifecycle operations
+  without adding thread shareability it does not need
+
+#### Scenario: A single-threaded async backend implements AsyncRegistry
+- **WHEN** a backend provides local async I/O or ready futures over a deliberately
+  `!Send`/`!Sync` representation
+- **THEN** it can implement `AsyncRegistry` without making the backend type or its
+  futures `Send`
+
+#### Scenario: A multi-threaded caller states the capability it uses
+- **WHEN** a caller shares or moves a registry backend across threads
+- **THEN** that caller requires `Send` and `Sync` at its own boundary rather than
+  inferring them from `Registry` or `AsyncRegistry`
+
+#### Scenario: Lifecycle authority is unchanged
+- **WHEN** either relaxed binding claims or applies a transition
+- **THEN** it retains the same eligibility, atomicity, retainer-fencing, lapse,
+  heartbeat, settlement, and deferred-reclaim obligations

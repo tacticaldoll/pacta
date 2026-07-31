@@ -130,3 +130,26 @@ transient decisions to be performed now, not durable state.
 - **WHEN** the kernel driving-protocol types are inspected
 - **THEN** they do not implement serde, because persisting an in-flight `Directive` or `Notice` would contradict the kernel's transient, sans-I/O nature
 
+### Requirement: Backend-Type Coloring Is Manifest On Consumer Surfaces
+Consumer and backend-author documentation SHALL state that `Registry` and
+`AsyncRegistry` do not require backend types to be `Send` or `Sync`, while callers
+that share a backend across threads must add those bounds themselves. The
+documentation SHALL distinguish backend-type coloring from the unchanged
+`Transition: Send + Sync` closure bound and from the async binding's
+`Send`-agnostic futures.
+
+#### Scenario: Sync backend authors see the relaxed contract
+- **WHEN** a consumer reads the facade or `Registry` backend-author documentation
+- **THEN** it states that a single-threaded backend may implement the binding and
+  that multi-threaded callers add their own `Send + Sync` bounds
+
+#### Scenario: Async backend authors see all three coloring boundaries
+- **WHEN** a consumer reads the `AsyncRegistry` documentation
+- **THEN** it separately identifies the backend type as coloring-agnostic, the
+  futures as `Send`-agnostic, and the pure `Transition` closure as
+  `Send + Sync`
+
+#### Scenario: Conformance documentation names the capability split
+- **WHEN** a backend author selects a conformance entry
+- **THEN** the documentation distinguishes sequential correctness, which accepts a
+  local backend, from contention proof, which requires a thread-shareable backend

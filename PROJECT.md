@@ -38,11 +38,12 @@ The behavior that must be protected at all costs:
   Pacta-native middleware, policies, and named governed design patterns — the
   first of which is the transition port (`apply`): the backend owns *how* a
   transition is applied atomically, the kernel owns *what* it decides.
-- **The runtime is the consumer's**: pacta owns the colorless mechanism; the async
-  binding forces no `Send` bound on its futures, so async and executor coloring are
-  the consumer's composition, not baked into the contract. (Both bindings do require a
-  backend *type* to be `Send + Sync` — thread-shareable — a shareability requirement
-  distinct from that future coloring.)
+- **The runtime is the consumer's**: pacta owns the colorless mechanism; neither
+  registry binding forces `Send + Sync` on the backend type, and the async binding
+  forces no `Send` on its futures, so backend, async, and executor coloring are the
+  consumer's composition, not baked into the contract. A caller that shares a
+  backend across threads states that requirement at its own concurrency boundary;
+  the pure `Transition` closure remains `Send + Sync` independently.
 - **Correctness is self-proven**: `pacta-conformance` is the definition of a
   correct backend, so a design is proven when the reference backend passes the
   suite — never validated by a downstream consumer. Consumers ignite pacta's

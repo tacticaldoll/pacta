@@ -437,7 +437,12 @@ pub use async_registry::{AsyncRegistry, apply_via_cas};
 /// Time is injected: [`claim`](Registry::claim) and [`heartbeat`](Registry::heartbeat) take the
 /// current time as a parameter, and the registry reads no ambient clock. Settlement takes no time
 /// because a rotated retainer already tells a stale holder apart from the current one.
-pub trait Registry: Send + Sync {
+///
+/// The backend type itself need not be [`Send`] or [`Sync`]. A single-threaded backend may stay
+/// local; a caller that moves or shares a registry across threads adds `Send + Sync` at that
+/// concurrency boundary. In particular, generic code that needs thread shareability must write
+/// `R: Registry + Send + Sync` rather than treating it as implied by this trait.
+pub trait Registry {
     /// Error returned by the registry implementation.
     type Error: std::error::Error;
 

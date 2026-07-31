@@ -8,10 +8,12 @@ same lease-lifecycle contract: claim, settlement, lapse, heartbeat (including th
 property that a reclaimed pact rejects the prior holder's authority. The suite is
 generic over `Registry` and takes a seeding closure, so a backend runs it from its own
 test module; time is driven through the trait by passing controlled `Timestamp` values,
-never a wall clock.
+never a wall clock. The sequential suite accepts a local `!Send`/`!Sync` backend.
 
 Beyond the sequential lifecycle scenarios it verifies **atomic authority under real
-concurrency** through the public trait only (never by inspecting a backend's locking):
+concurrency** through the public trait only (never by inspecting a backend's locking).
+These OS-thread entries explicitly require a thread-shareable backend
+(`Send + Sync + 'static`):
 
 - `run_contention` — for a sync `Registry`: two workers race a settlement on one claimed
   pact (exactly one succeeds) and two workers race a claim on one available pact (exactly
@@ -24,8 +26,9 @@ cannot drift and a real backend never re-declares scenarios:
 
 - `run_async_with(make, driver)` — the runtime-compatible entry: a real-reactor backend
   drives the scenarios on its **own** runtime via a small `BlockingDriver` (for example one
-  wrapping `tokio::runtime::Runtime::block_on`). It imposes no `Send` bound on the backend's
-  futures and pulls no async runtime into this crate.
+  wrapping `tokio::runtime::Runtime::block_on`). It imposes no `Send` or `Sync` bound on the
+  backend type or driver, no `Send` bound on the backend's futures, and pulls no async runtime
+  into this crate.
 - `run_async` — a convenience for **ready-future** backends, using the built-in
   `SelfProgress` driver. It is not correct for a backend whose futures park pending real
   I/O or a timer; such a backend uses `run_async_with`.

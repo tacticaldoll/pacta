@@ -18,7 +18,10 @@ port type is the backend-author surface.
 Behind the `async` feature it also ships `AsyncRegistry` — the same five-op contract made
 asynchronous, a second binding over the same transition port (native `async fn` in traits,
 `Send`-agnostic at its futures) — and the optional `apply_via_cas` compare-and-set helper.
-A sync-only consumer that does not enable `async` compiles none of it.
+A backend type in either binding need not be `Send` or `Sync`, so a single-threaded backend
+may stay local; callers that share a backend across threads add those bounds themselves. The
+pure `Transition` closure remains `Send + Sync` independently. A sync-only consumer that does
+not enable `async` compiles none of it.
 
 It also holds the advanced-tier `kernel`: a pure step-driver state machine that decides the
 lifecycle through `Directive` / `Notice`, performs no I/O, and exposes no `async fn`, so it

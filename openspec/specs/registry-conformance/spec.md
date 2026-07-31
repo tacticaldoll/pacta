@@ -246,3 +246,39 @@ this suite.
 - **WHEN** documentation describes the full-scan-free claim obligation
 - **THEN** it states that the sequential conformance suite does not prove it, keeping the behavior proof separate from the query-shape obligation
 
+### Requirement: Sequential And Concurrent Capability Bounds Are Separate
+The sequential sync and async conformance entries SHALL accept backend types that
+implement only their corresponding registry binding and SHALL NOT require the
+backend or an async blocking driver to be `Send` or `Sync`. A contention entry that
+shares a backend through `Arc` across OS threads SHALL instead require
+`Send + Sync + 'static` explicitly at that entry. The suite SHALL prove the
+separation by running the sequential scenarios through deliberately
+`!Send`/`!Sync` sync and async backend wrappers while retaining contention coverage
+against thread-safe backends.
+
+#### Scenario: Sequential sync conformance accepts a local backend
+- **WHEN** the sync scenario suite runs against a deliberately `!Send`/`!Sync`
+  `Registry`
+- **THEN** the scenarios compile and pass without a thread-safety bound
+
+#### Scenario: Sequential async conformance accepts a local backend and driver
+- **WHEN** the ready-future entry drives a deliberately `!Send`/`!Sync`
+  `AsyncRegistry`, or the runtime-compatible entry drives it with a deliberately
+  `!Send`/`!Sync` blocking driver
+- **THEN** the shared sequential scenarios compile and pass without imposing
+  `Send` or `Sync` on the backend, driver, or futures
+
+#### Scenario: Sync contention declares thread shareability
+- **WHEN** the sync contention entry shares a backend across OS threads
+- **THEN** its public bounds explicitly require
+  `Registry + Send + Sync + 'static`
+
+#### Scenario: Async contention declares thread shareability
+- **WHEN** the async contention entry shares a backend across OS threads
+- **THEN** its public bounds explicitly require
+  `AsyncRegistry + Send + Sync + 'static`
+
+#### Scenario: Relaxation does not weaken contention proof
+- **WHEN** the conformance suite runs against the thread-safe reference backends
+- **THEN** both sync and async claim and settlement contention checks still pass,
+  and the deterministic broken fixtures still prove the harness reacts
