@@ -11,6 +11,14 @@ categories.workspace = true
 description = "The isolated core contract for Pacta: durable lifecycle vocabulary and a sans-I/O kernel."
 publish.workspace = true
 
+[features]
+# The async binding (AsyncRegistry + apply_via_cas). A zero-dependency gate — it gates code only,
+# since native AFIT needs no async-trait. Sync-only consumers do not enable it and compile no async.
+async = []
+
 [dependencies]
 serde.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

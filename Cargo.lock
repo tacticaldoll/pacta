@@ -130,7 +130,6 @@ name = "pacta-conformance"
 version = "0.1.2"
 dependencies = [
  "pacta-contract",
- "pacta-contract-async",
  "uuid",
 ]
 
@@ -139,14 +138,6 @@ name = "pacta-contract"
 version = "0.1.2"
 dependencies = [
  "serde",
- "uuid",
-]
-
-[[package]]
-name = "pacta-contract-async"
-version = "0.1.0"
-dependencies = [
- "pacta-contract",
  "tokio",
  "uuid",
 ]
@@ -181,16 +172,6 @@ version = "0.1.2"
 dependencies = [
  "pacta-conformance",
  "pacta-contract",
- "uuid",
-]
-
-[[package]]
-name = "pacta-memory-async"
-version = "0.1.0"
-dependencies = [
- "pacta-conformance",
- "pacta-contract",
- "pacta-contract-async",
  "uuid",
 ]
 

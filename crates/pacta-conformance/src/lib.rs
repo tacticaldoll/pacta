@@ -65,7 +65,7 @@ where
     heartbeat_unknown_retainer_rejected(&make);
 }
 
-/// Async conformance: hold an [`AsyncRegistry`](pacta_contract_async::AsyncRegistry) backend to the
+/// Async conformance: hold an [`AsyncRegistry`](pacta_contract::AsyncRegistry) backend to the
 /// exact same scenarios as the sync suite.
 ///
 /// The async runner reuses [`run`] rather than a duplicated scenario set: it adapts the async
@@ -81,8 +81,8 @@ where
 mod async_runner {
     use core::future::Future;
 
+    use pacta_contract::AsyncRegistry;
     use pacta_contract::{Claim, Pact, Registry, Retainer, Timestamp, Transition};
-    use pacta_contract_async::AsyncRegistry;
 
     /// Drive a future to completion on the current thread with a no-op waker. Correct for futures
     /// that make progress without an external reactor; keeps the crate dependency- and unsafe-free.
@@ -146,7 +146,7 @@ mod async_runner {
     /// mechanism), so it holds for a lock, a transaction, or a compare-and-set backend alike.
     ///
     /// Parallelism is real (OS threads); each thread drives its future to completion with
-    /// [`block_on`], so a future never migrates across threads and **no `Send` bound on the future is
+    /// `block_on`, so a future never migrates across threads and **no `Send` bound on the future is
     /// required** — the suite pulls no async runtime.
     pub fn run_async_contention<R, F>(make: F)
     where

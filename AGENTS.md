@@ -150,17 +150,22 @@ syncing specs. This is the single source for the gate list — `README.md` and
 `docs/development-flow.md` point here rather than restating it.
 
 ```bash
-cargo build --workspace
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
+cargo build --workspace --all-features
+cargo test --workspace --all-features
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all --check
-RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 cargo deny check
 cargo run -p pacta-governance -- check --manifest-path Cargo.toml
 ```
 
+`--all-features` is required so the `async` feature — under which the async binding
+(`AsyncRegistry`, in `pacta-contract`) and the async reference backend and conformance run — stays
+covered by build, test, clippy, and doc; without it the feature-gated async code is invisible to the
+gate. (`fmt` and `cargo deny` are feature-independent.)
+
 CI runs the same gates on push and pull request, and additionally verifies the
-declared MSRV builds (`cargo +1.88 build --workspace`). Rust style lives in these
+declared MSRV builds (`cargo +1.88 build --workspace --all-features`). Rust style lives in these
 checks: rustfmt formats, clippy denies warnings, rustdoc denies documentation
 warnings, cargo-deny owns resolved supply-chain policy, and `pacta-governance` owns
 Tianheng architecture boundaries.

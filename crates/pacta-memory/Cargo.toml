@@ -11,9 +11,14 @@ categories.workspace = true
 description = "In-memory Pacta Registry backend with real lease and lapse semantics."
 publish.workspace = true
 
+[features]
+# The reference async backend (MemoryRegistryAsync), over the shared store. Zero extra deps beyond
+# pacta-contract's async feature.
+async = ["pacta-contract/async"]
+
 [dependencies]
 pacta-contract.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-pacta-conformance.workspace = true
+pacta-conformance = { workspace = true, features = ["async"] }
