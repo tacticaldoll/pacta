@@ -34,7 +34,10 @@ fn a_pact() -> Pact {
     )
 }
 
-fn main() {
+// `pub` so `tests/durable_retry.rs` can call it directly (via `#[path]`) and let `cargo
+// test --workspace` actually execute this demonstration's assertions -- visibility only,
+// no change to running this standalone via `cargo run --example durable_retry`.
+pub fn main() {
     // Seed one pact. (Creation is backend-inherent — here via the reference constructor.)
     let registry = MemoryRegistry::seeded(vec![a_pact()], LEASE_MILLIS);
     let mut attempts = 0u32;
