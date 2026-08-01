@@ -60,7 +60,12 @@ When reading proposals or reviewing code, actively challenge the design:
   Does it treat a benchmark or adapter as core identity?
 - **Apply phase**: Does the implementation leak orchestration, integration, or
   product prose drift into core crates or active guidance? Does Tianheng still
-  bite the boundary that the prose claims?
+  bite the boundary that the prose claims? Does a new public type representing a
+  decision or settlement a caller must act on (joining `Outcome`, `Verdict`,
+  `StepResult`, `Directive`, `Notice`, `lifecycle::State`, `Step`, `DriverError`)
+  carry `#[must_use]`, so silently discarding it cannot compile clean? This stays a
+  review question, not a governance reaction: whether a given type represents such a
+  decision is a semantic judgment a line scan cannot safely automate.
 
 Reject or redesign changes that pull Pacta toward broad queue-runtime behavior.
 
