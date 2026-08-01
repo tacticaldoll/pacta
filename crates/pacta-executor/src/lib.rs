@@ -42,6 +42,7 @@ pub trait Executor {
 /// growing kernel protocol enums): it is the complete answer to one question — keep lapsing,
 /// or concede — not a protocol that accretes new cases over time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
 pub enum Verdict {
     /// Propagate the error so the claim is left unsettled: it lapses and may be reclaimed
     /// and attempted again by a later step.
@@ -386,7 +387,7 @@ mod tests {
         let mut executor = composed.wrap(RecordingInner {
             log: Rc::clone(&log),
         });
-        executor.execute(dummy_execution()).unwrap();
+        let _ = executor.execute(dummy_execution()).unwrap();
 
         // Full trace: the first-added middleware is outermost — entered first, exited last; the
         // second is nested within it; the executor is innermost.

@@ -26,6 +26,7 @@ fn current_time() -> Timestamp {
 /// heartbeat or lapse step), so a downstream match must carry a wildcard arm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
+#[must_use]
 pub enum Step {
     /// No pact was available from the configured dockets.
     Idle,
@@ -41,6 +42,7 @@ pub enum Step {
 /// downstream match must carry a wildcard arm.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
+#[must_use]
 pub enum DriverError<RegistryError, ExecutorError> {
     /// Registry operation failed.
     Registry(RegistryError),
