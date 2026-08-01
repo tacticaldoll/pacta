@@ -135,6 +135,7 @@ const _: fn() = || {
 
 /// The lifecycle outcome an execution produces for a claimed pact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
 pub enum Outcome {
     /// The pact was fulfilled successfully.
     Fulfilled,
@@ -171,6 +172,7 @@ pub mod lifecycle {
     /// protocol enums (`Directive`/`Notice`/`StepResult`) elsewhere in this crate. (This is a
     /// stability statement for 0.2.x, not a promise never to evolve the model in a later minor.)
     #[derive(Debug, Clone, PartialEq, Eq)]
+    #[must_use]
     pub enum State {
         /// Never claimed, or freshly seeded: immediately claimable.
         Available,
@@ -232,7 +234,6 @@ pub mod lifecycle {
 
     /// The state a successful claim produces: `Held` by `retainer` until the lease
     /// expiry for `now`/`lease_millis`. The backend mints `retainer` and passes it in.
-    #[must_use]
     pub fn on_claim(retainer: &Retainer, now: Timestamp, lease_millis: u64) -> State {
         State::Held {
             retainer: retainer.clone(),
@@ -578,6 +579,7 @@ pub mod kernel {
     /// runtime's match must carry a wildcard arm.
     #[derive(Debug, Clone)]
     #[non_exhaustive]
+    #[must_use]
     pub enum Directive {
         /// Claim a pact from the runtime's configured dockets.
         Claim,
@@ -595,6 +597,7 @@ pub mod kernel {
     /// consumer's match must carry a wildcard arm.
     #[derive(Debug, Clone)]
     #[non_exhaustive]
+    #[must_use]
     pub enum Notice {
         /// Result of a claim: a claim if one was available, else none.
         Claimed(Option<Claim>),
@@ -615,6 +618,7 @@ pub mod kernel {
     /// consumer's match must carry a wildcard arm.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     #[non_exhaustive]
+    #[must_use]
     pub enum StepResult {
         /// No pact was available to claim.
         Idle,
@@ -658,7 +662,6 @@ pub mod kernel {
         }
 
         /// Decide the next directive from the current state.
-        #[must_use]
         pub fn poll(&self) -> Directive {
             match &self.phase {
                 Phase::Claiming => Directive::Claim,
