@@ -37,7 +37,8 @@ Each publishable crate SHALL carry the metadata crates.io needs: a `description`
 sourced from `workspace.package` where shared, and a crate-specific `readme`. The
 `readme` SHALL resolve to a file within the crate, not the shared workspace-root
 README, so each crate's crates.io page documents that crate rather than the
-workspace as a whole.
+workspace as a whole. `pacta-governance`'s `check` command SHALL verify this
+requirement, so a regression cannot ship silently through prose review alone.
 
 #### Scenario: Publishable crates carry required metadata
 - **WHEN** a publishable crate's manifest is read
@@ -51,6 +52,12 @@ workspace as a whole.
 #### Scenario: Discoverability metadata is present
 - **WHEN** a publishable crate's manifest is read
 - **THEN** it resolves `keywords` and `categories` for crates.io discovery
+
+#### Scenario: Governance verifies release metadata
+- **WHEN** `pacta-governance`'s `check` command runs
+- **THEN** it fails if any publishable crate's manifest is missing a required
+  metadata field, or resolves `readme` to the shared workspace-root README instead
+  of a crate-local file
 
 ### Requirement: Declared And Verified MSRV
 Pacta SHALL declare a minimum supported Rust version and verify it, so the declared
