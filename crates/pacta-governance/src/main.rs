@@ -265,25 +265,11 @@ fn main() -> ExitCode {
         }
 
         if let Err(violations) = check_facade_reexports_only(&root) {
-            eprintln!("pacta facade governance failed: {FACADE_REEXPORT_REASON}");
-            for violation in violations {
-                eprintln!(
-                    "{}:{}: `{}`",
-                    violation.path, violation.line, violation.marker
-                );
-            }
-            return ExitCode::from(1);
+            return report_source_violations(FACADE_REEXPORT_REASON, "facade", violations);
         }
 
         if let Err(violations) = check_executor_no_orchestration(&root) {
-            eprintln!("pacta executor governance failed: {EXECUTOR_ORCHESTRATION_REASON}");
-            for violation in violations {
-                eprintln!(
-                    "{}:{}: `{}`",
-                    violation.path, violation.line, violation.marker
-                );
-            }
-            return ExitCode::from(1);
+            return report_source_violations(EXECUTOR_ORCHESTRATION_REASON, "executor", violations);
         }
 
         if let Err(violations) = check_changelog_footer_links(&root) {
@@ -310,6 +296,24 @@ fn main() -> ExitCode {
     }
 
     tianheng::run(&constitution(), args)
+}
+
+/// Prints every `SourceViolation` the same way and returns the shared failure exit code — the
+/// facade and executor reactions share this exact shape (both scan a source tree for a single
+/// forbidden marker), so the print loop is written once rather than repeated per gate.
+fn report_source_violations(
+    reason: &str,
+    label: &str,
+    violations: Vec<SourceViolation>,
+) -> ExitCode {
+    eprintln!("pacta {label} governance failed: {reason}");
+    for violation in violations {
+        eprintln!(
+            "{}:{}: `{}`",
+            violation.path, violation.line, violation.marker
+        );
+    }
+    ExitCode::from(1)
 }
 
 fn should_check_prose(args: &[String]) -> bool {
@@ -458,12 +462,18 @@ struct ReleaseMetadataViolation {
 }
 
 /// Fields the `release-packaging` Release Metadata requirement declares as shared via
-/// `workspace.package` today; each is satisfied by either a literal value or
-/// `<field>.workspace = true`. `description` and `readme` are checked separately because
-/// neither has a `workspace.package` default to inherit from in this workspace, so each
-/// publishable crate must declare its own non-empty literal.
-const RELEASE_METADATA_WORKSPACE_FIELDS: &[&str] =
-    &["license", "repository", "keywords", "categories"];
+/// `workspace.package` today, paired with the violation marker to report when absent; each is
+/// satisfied by either a literal value or `<field>.workspace = true`. `description` and `readme`
+/// are checked separately because neither has a `workspace.package` default to inherit from in
+/// this workspace, so each publishable crate must declare its own non-empty literal. Paired as
+/// one array (rather than a field-name list plus a parallel match) so a field can never be
+/// checked without a marker to report, or vice versa.
+const RELEASE_METADATA_WORKSPACE_FIELDS: &[(&str, &str)] = &[
+    ("license", "missing `license`"),
+    ("repository", "missing `repository`"),
+    ("keywords", "missing `keywords`"),
+    ("categories", "missing `categories`"),
+];
 
 /// `release-packaging`'s Release Metadata requirement: every publishable crate's manifest must
 /// carry `description`, `license`, `repository`, `readme`, `keywords`, and `categories`, and
@@ -536,12 +546,12 @@ fn check_release_metadata(root: &Path) -> Result<(), Vec<ReleaseMetadataViolatio
 
         check_readme_field(root, &krate_dir, &name, &package_table, &mut violations);
 
-        for field in RELEASE_METADATA_WORKSPACE_FIELDS {
+        for (field, marker) in RELEASE_METADATA_WORKSPACE_FIELDS {
             if !has_field(&package_table, field) {
                 violations.push(ReleaseMetadataViolation {
                     krate: name.clone(),
                     line: 0,
-                    marker: missing_field_marker(field),
+                    marker,
                 });
             }
         }
@@ -594,16 +604,6 @@ fn check_readme_field(
             line,
             marker: "readme resolves to the shared workspace-root README, not a crate-local file",
         });
-    }
-}
-
-fn missing_field_marker(field: &str) -> &'static str {
-    match field {
-        "license" => "missing `license`",
-        "repository" => "missing `repository`",
-        "keywords" => "missing `keywords`",
-        "categories" => "missing `categories`",
-        _ => "missing required field",
     }
 }
 

@@ -342,72 +342,17 @@ mod async_runner {
         R::Error: core::fmt::Debug + Send,
         F: Fn(Vec<Pact>, u64) -> R,
     {
-        use std::sync::Arc;
-
-        // Two workers race a settlement on one claimed pact: exactly one succeeds.
-        for _ in 0..crate::CONTENTION_ROUNDS {
-            let reg = Arc::new(make(vec![crate::a_pact()], crate::LEASE_MILLIS));
-            let retainer = block_on(reg.claim(&[crate::DOCKET], crate::at(0)))
-                .expect("claim should not error")
-                .expect("a pact should be claimable")
-                .retainer;
-
-            let a = {
-                let reg = Arc::clone(&reg);
-                let retainer = retainer.clone();
-                std::thread::spawn(move || block_on(reg.fulfill(&retainer)))
-            };
-            let b = {
-                let reg = Arc::clone(&reg);
-                let retainer = retainer.clone();
-                std::thread::spawn(move || block_on(reg.fulfill(&retainer)))
-            };
-            let (ra, rb) = (a.join().unwrap(), b.join().unwrap());
-
-            let winners = [ra.is_ok(), rb.is_ok()]
-                .into_iter()
-                .filter(|&ok| ok)
-                .count();
-            assert_eq!(
-                winners, 1,
-                "settlement must apply exactly once: a={ra:?} b={rb:?}"
-            );
-            assert!(
-                block_on(reg.claim(&[crate::DOCKET], crate::at(0)))
-                    .expect("claim should not error")
-                    .is_none(),
-                "a settled pact must not be claimable again"
-            );
-        }
-
-        // Two workers race a claim on one available pact: exactly one gets a claim, never two.
-        for _ in 0..crate::CONTENTION_ROUNDS {
-            let reg = Arc::new(make(vec![crate::a_pact()], crate::LEASE_MILLIS));
-            let a = {
-                let reg = Arc::clone(&reg);
-                std::thread::spawn(move || {
-                    block_on(reg.claim(&[crate::DOCKET], crate::at(0)))
-                        .expect("claim should not error")
-                        .map(|claim| claim.retainer.id())
-                })
-            };
-            let b = {
-                let reg = Arc::clone(&reg);
-                std::thread::spawn(move || {
-                    block_on(reg.claim(&[crate::DOCKET], crate::at(0)))
-                        .expect("claim should not error")
-                        .map(|claim| claim.retainer.id())
-                })
-            };
-            let (ra, rb) = (a.join().unwrap(), b.join().unwrap());
-
-            let claims = [ra, rb].into_iter().flatten().collect::<Vec<_>>();
-            assert_eq!(
-                claims.len(),
-                1,
-                "exactly one worker must claim the single available pact: {claims:?}"
-            );
-        }
+        // Reuses the sync suite's own contention checks over the `BlockOn` adapter, rather than
+        // a second hand-rolled race-detection pair, for the same reason `run_async_with` reuses
+        // `run`: sync and async coverage cannot drift apart.
+        crate::settle_contention(&|pacts, lease| BlockOn {
+            registry: make(pacts, lease),
+            driver: SelfProgress,
+        });
+        crate::claim_contention(&|pacts, lease| BlockOn {
+            registry: make(pacts, lease),
+            driver: SelfProgress,
+        });
     }
 
     /// A reactor-backed fixture proving the runtime-compatible entry drives futures that a naive

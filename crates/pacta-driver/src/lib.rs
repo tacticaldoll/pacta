@@ -208,7 +208,6 @@ mod tests {
     #[derive(Default)]
     struct RegistryState {
         claim: Option<Claim>,
-        claimed_dockets: Vec<Vec<String>>,
         fulfilled: usize,
         breached: usize,
     }
@@ -232,12 +231,7 @@ mod tests {
     impl Registry for TestRegistry {
         type Error = TestError;
 
-        fn claim(&self, dockets: &[&str], _now: Timestamp) -> Result<Option<Claim>, Self::Error> {
-            self.state
-                .lock()
-                .expect("registry state should not be poisoned")
-                .claimed_dockets
-                .push(dockets.iter().map(ToString::to_string).collect());
+        fn claim(&self, _dockets: &[&str], _now: Timestamp) -> Result<Option<Claim>, Self::Error> {
             Ok(self
                 .state
                 .lock()
