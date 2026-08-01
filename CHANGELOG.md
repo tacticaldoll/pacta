@@ -4,6 +4,48 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-08-01
+
+Patch-compatible: governance hardening and a demonstrated pattern, no breaking change.
+
+### Added
+
+- **`pacta-governance` release-metadata reaction**: fails if a publishable crate's
+  manifest is missing `description`, `license`, `repository`, `readme`, `keywords`,
+  or `categories`, or if `readme` resolves to the shared workspace-root README
+  instead of a crate-local file. Previously verified only by prose review and
+  `cargo publish --dry-run`.
+- **Operator Review (`Tribunal`) is demonstrated**: `Tribunal`'s reserved
+  vocabulary (`docs/domain-language.md`) gets its first working referent —
+  `composition-governance`'s new "Terminal Review Is Demonstrated" requirement,
+  proven by a `#[cfg(test)]`-only `pacta-executor` fixture that records an
+  exhausted pact (`Verdict::Concede`) for operator inspection. Composes entirely
+  over the existing `Policy`/`Middleware` seam; adds no `Registry` capability and
+  ships no concrete `Tribunal` type.
+
+### Changed
+
+- **`#[must_use]` on decision types**: `Outcome`, `Verdict`, `StepResult`,
+  `Directive`, `Notice`, `lifecycle::State` (`pacta-contract`/`pacta-executor`),
+  and `Step`, `DriverError` (`pacta-driver`) now carry type-level `#[must_use]`,
+  so discarding one without reading it fails to compile clean. Additive per Rust's
+  own semver conventions.
+
+### Fixed
+
+- **`durable_retry` example now runs under `cargo test`**: `composition-governance`
+  claimed this demonstration self-checks under the Definition of Done, but
+  `cargo test --workspace` never executed its `main()`. A thin `#[path]`-include
+  test now runs it for the first time; the example itself is unchanged and still
+  runs standalone via `cargo run --example durable_retry`.
+
+### Documentation
+
+- `AGENTS.md`'s Adversarial Review Stance gained a checklist question for
+  `#[must_use]` on future decision types, and `BACKLOG.md` was brought current
+  with this release's shipped governance and patterns (three internal
+  contradictions from before this release fixed along the way).
+
 ## [0.3.0] - 2026-07-30
 
 Relaxes backend thread-safety coloring, ships the `Policy` user-obligation trait, and
@@ -263,6 +305,7 @@ First public release: the thin lifecycle foundation, not a complete durable runt
 - No ingress API (`Signal -> Pact` is user-provided, not a shipped surface).
 - No framework adapters (Tower, HTTP) and no retry/backoff/timeout orchestration.
 
+[0.3.1]: https://github.com/tacticaldoll/pacta/releases/tag/v0.3.1
 [0.3.0]: https://github.com/tacticaldoll/pacta/releases/tag/v0.3.0
 [0.2.2]: https://github.com/tacticaldoll/pacta/releases/tag/v0.2.2
 [0.2.1]: https://github.com/tacticaldoll/pacta/releases/tag/v0.2.1

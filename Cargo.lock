@@ -119,7 +119,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "pacta"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "pacta-contract",
  "pacta-driver",
@@ -128,7 +128,7 @@ dependencies = [
 
 [[package]]
 name = "pacta-conformance"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "pacta-contract",
  "tokio",
@@ -137,7 +137,7 @@ dependencies = [
 
 [[package]]
 name = "pacta-contract"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
  "tokio",
@@ -146,7 +146,7 @@ dependencies = [
 
 [[package]]
 name = "pacta-driver"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "pacta-contract",
  "pacta-executor",
@@ -155,21 +155,21 @@ dependencies = [
 
 [[package]]
 name = "pacta-executor"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "pacta-contract",
 ]
 
 [[package]]
 name = "pacta-governance"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "tianheng",
 ]
 
 [[package]]
 name = "pacta-memory"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "pacta-conformance",
  "pacta-contract",
