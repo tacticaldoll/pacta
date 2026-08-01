@@ -57,6 +57,7 @@ const FORBIDDEN_ORCHESTRATION_WORDS: &[&str] = &[
 ];
 
 const CHANGELOG_FOOTER_REASON: &str = "every CHANGELOG.md version heading must resolve through a matching reference-style footer link, so a release entry can never ship without resolving to its GitHub release page.";
+const RELEASE_METADATA_REASON: &str = "every publishable crate must carry description, license, repository, readme, keywords, and categories, and readme must resolve to a crate-local file rather than the shared workspace-root README, so release-packaging's Release Metadata requirement cannot regress silently through prose review alone.";
 
 const ACTIVE_PROSE_FILES: &[&str] = &[
     "AGENTS.md",
@@ -295,6 +296,17 @@ fn main() -> ExitCode {
             }
             return ExitCode::from(1);
         }
+
+        if let Err(violations) = check_release_metadata(&root) {
+            eprintln!("pacta release-metadata governance failed: {RELEASE_METADATA_REASON}");
+            for violation in violations {
+                eprintln!(
+                    "crates/{}/Cargo.toml:{}: {}",
+                    violation.krate, violation.line, violation.marker
+                );
+            }
+            return ExitCode::from(1);
+        }
     }
 
     tianheng::run(&constitution(), args)
@@ -436,6 +448,233 @@ fn check_changelog_footer_links(root: &Path) -> Result<(), Vec<ChangelogFooterVi
 /// example, `Unreleased` or an unrelated reference-style link label.
 fn is_version_like(candidate: &str) -> bool {
     !candidate.is_empty() && candidate.chars().all(|c| c.is_ascii_digit() || c == '.')
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ReleaseMetadataViolation {
+    krate: String,
+    line: usize,
+    marker: &'static str,
+}
+
+/// Fields the `release-packaging` Release Metadata requirement declares as shared via
+/// `workspace.package` today; each is satisfied by either a literal value or
+/// `<field>.workspace = true`. `description` and `readme` are checked separately because
+/// neither has a `workspace.package` default to inherit from in this workspace, so each
+/// publishable crate must declare its own non-empty literal.
+const RELEASE_METADATA_WORKSPACE_FIELDS: &[&str] =
+    &["license", "repository", "keywords", "categories"];
+
+/// `release-packaging`'s Release Metadata requirement: every publishable crate's manifest must
+/// carry `description`, `license`, `repository`, `readme`, `keywords`, and `categories`, and
+/// `readme` must resolve to a crate-local file rather than the shared workspace-root README.
+/// This is deliberately a line scan over `crates/*/Cargo.toml`'s `[package]` table, not a TOML
+/// parser, for the same reason `check_changelog_footer_links` is: this crate may depend only on
+/// `tianheng`.
+fn check_release_metadata(root: &Path) -> Result<(), Vec<ReleaseMetadataViolation>> {
+    let crates_dir = root.join("crates");
+
+    let Ok(entries) = fs::read_dir(&crates_dir) else {
+        return Err(vec![ReleaseMetadataViolation {
+            krate: String::from("crates/"),
+            line: 0,
+            marker: "no crates/ directory found",
+        }]);
+    };
+
+    let mut krate_dirs: Vec<PathBuf> = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect();
+    krate_dirs.sort();
+
+    // No crate directories found at all is a vacuous pass unless converted into a failure —
+    // mirror the coverage/facade checks' non-vacuous guard.
+    if krate_dirs.is_empty() {
+        return Err(vec![ReleaseMetadataViolation {
+            krate: String::from("crates/"),
+            line: 0,
+            marker: "no crate directories found under crates/",
+        }]);
+    }
+
+    let mut violations = Vec::new();
+
+    for krate_dir in krate_dirs {
+        let name = krate_dir
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| String::from("<unknown>"));
+        let manifest_path = krate_dir.join("Cargo.toml");
+
+        let Ok(content) = fs::read_to_string(&manifest_path) else {
+            violations.push(ReleaseMetadataViolation {
+                krate: name,
+                line: 0,
+                marker: "unreadable crate manifest",
+            });
+            continue;
+        };
+
+        let package_table = package_table_lines(&content);
+
+        // A crate that opts out of publishing (a literal `publish = false`, the same form
+        // `pacta-governance` itself uses) carries none of this requirement.
+        if is_not_publishable(&package_table) {
+            continue;
+        }
+
+        match literal_field_value(&package_table, "description") {
+            Some((_, value)) if !value.is_empty() => {}
+            _ => violations.push(ReleaseMetadataViolation {
+                krate: name.clone(),
+                line: 0,
+                marker: "missing or empty `description`",
+            }),
+        }
+
+        check_readme_field(root, &krate_dir, &name, &package_table, &mut violations);
+
+        for field in RELEASE_METADATA_WORKSPACE_FIELDS {
+            if !has_field(&package_table, field) {
+                violations.push(ReleaseMetadataViolation {
+                    krate: name.clone(),
+                    line: 0,
+                    marker: missing_field_marker(field),
+                });
+            }
+        }
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(violations)
+    }
+}
+
+fn check_readme_field(
+    root: &Path,
+    krate_dir: &Path,
+    name: &str,
+    package_table: &[(usize, &str)],
+    violations: &mut Vec<ReleaseMetadataViolation>,
+) {
+    let Some((line, value)) = literal_field_value(package_table, "readme") else {
+        violations.push(ReleaseMetadataViolation {
+            krate: name.to_owned(),
+            line: 0,
+            marker: "missing `readme`",
+        });
+        return;
+    };
+
+    if value.is_empty() {
+        violations.push(ReleaseMetadataViolation {
+            krate: name.to_owned(),
+            line,
+            marker: "missing `readme`",
+        });
+        return;
+    }
+
+    let Ok(resolved) = fs::canonicalize(krate_dir.join(&value)) else {
+        violations.push(ReleaseMetadataViolation {
+            krate: name.to_owned(),
+            line,
+            marker: "readme does not resolve to an existing file",
+        });
+        return;
+    };
+
+    if fs::canonicalize(root.join("README.md")).is_ok_and(|root_readme| root_readme == resolved) {
+        violations.push(ReleaseMetadataViolation {
+            krate: name.to_owned(),
+            line,
+            marker: "readme resolves to the shared workspace-root README, not a crate-local file",
+        });
+    }
+}
+
+fn missing_field_marker(field: &str) -> &'static str {
+    match field {
+        "license" => "missing `license`",
+        "repository" => "missing `repository`",
+        "keywords" => "missing `keywords`",
+        "categories" => "missing `categories`",
+        _ => "missing required field",
+    }
+}
+
+/// Lines belonging to the manifest's `[package]` table (1-indexed line number, trimmed content),
+/// stopping at the next `[`-prefixed table header so a same-named key in `[dependencies]` or
+/// elsewhere is never misread as a package field.
+fn package_table_lines(content: &str) -> Vec<(usize, &str)> {
+    let mut lines = Vec::new();
+    let mut in_package = false;
+
+    for (index, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_package = trimmed == "[package]";
+            continue;
+        }
+        if in_package && !trimmed.is_empty() {
+            lines.push((index + 1, trimmed));
+        }
+    }
+
+    lines
+}
+
+/// Whether the `[package]` table carries a literal `publish = false` — the same form
+/// `pacta-governance` itself uses to opt out of the workspace's default `publish = true`.
+fn is_not_publishable(package_table: &[(usize, &str)]) -> bool {
+    package_table
+        .iter()
+        .any(|(_, line)| line.replace(' ', "") == "publish=false")
+}
+
+/// The 1-indexed line number and quoted string value of a literal `field = "value"` entry in
+/// the `[package]` table, or `None` if the field is absent or not a literal string (e.g. a
+/// `<field>.workspace = true` entry, which this deliberately does not match).
+fn literal_field_value(package_table: &[(usize, &str)], field: &str) -> Option<(usize, String)> {
+    for (line_no, line) in package_table {
+        if let Some((key, value)) = line.split_once('=')
+            && key.trim() == field
+        {
+            return Some((*line_no, extract_quoted(value.trim())));
+        }
+    }
+
+    None
+}
+
+fn extract_quoted(value: &str) -> String {
+    if value.len() >= 2 && value.starts_with('"') && value.ends_with('"') {
+        value[1..value.len() - 1].to_owned()
+    } else {
+        String::new()
+    }
+}
+
+/// Whether the `[package]` table satisfies `field` via either a non-empty literal value or
+/// `<field>.workspace = true`.
+fn has_field(package_table: &[(usize, &str)], field: &str) -> bool {
+    let workspace_form = format!("{field}.workspace=true");
+
+    package_table.iter().any(|(_, line)| {
+        let normalized = line.replace(' ', "");
+        if normalized == workspace_form {
+            return true;
+        }
+
+        line.split_once('=').is_some_and(|(key, value)| {
+            let value = value.trim();
+            key.trim() == field && !value.is_empty() && value != "\"\""
+        })
+    })
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -847,6 +1086,132 @@ pacta-driver = { path = "../pacta-driver" }
             vec![ChangelogFooterViolation {
                 line: 0,
                 version: String::from("<unreadable>"),
+            }]
+        );
+    }
+
+    #[test]
+    fn current_release_metadata_satisfies_governance() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+
+        assert_eq!(check_release_metadata(&root), Ok(()));
+    }
+
+    #[test]
+    fn crate_missing_description_fails_loudly() {
+        let workspace = TempWorkspace::new("pacta-governance-missing-description");
+        workspace.write_release_metadata_crate(
+            "widget",
+            r#"
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords.workspace = true
+categories.workspace = true
+"#,
+        );
+
+        let Err(violations) = check_release_metadata(&workspace.path) else {
+            panic!("a crate with no `description` must fail the gate");
+        };
+        assert!(
+            violations
+                .iter()
+                .any(|violation| violation.krate == "widget"
+                    && violation.marker == "missing or empty `description`"),
+            "expected a missing-description violation for `widget`: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn crate_readme_pointing_at_shared_root_readme_fails_loudly() {
+        let workspace = TempWorkspace::new("pacta-governance-readme-points-at-root");
+        workspace.write_release_metadata_crate(
+            "widget",
+            r#"
+description = "A widget."
+license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords.workspace = true
+categories.workspace = true
+"#,
+        );
+
+        let Err(violations) = check_release_metadata(&workspace.path) else {
+            panic!("a crate whose readme resolves to the shared root README must fail the gate");
+        };
+        assert!(
+            violations.iter().any(|violation| violation.krate == "widget"
+                && violation.marker
+                    == "readme resolves to the shared workspace-root README, not a crate-local file"),
+            "expected a shared-root-readme violation for `widget`: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn crate_missing_discoverability_metadata_fails_loudly() {
+        let workspace = TempWorkspace::new("pacta-governance-missing-discoverability");
+        workspace.write_release_metadata_crate(
+            "widget",
+            r#"
+description = "A widget."
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+"#,
+        );
+
+        let Err(violations) = check_release_metadata(&workspace.path) else {
+            panic!("a crate with no keywords/categories must fail the gate");
+        };
+        assert!(
+            violations
+                .iter()
+                .any(|violation| violation.krate == "widget"
+                    && violation.marker == "missing `keywords`"),
+            "expected a missing-keywords violation for `widget`: {violations:?}"
+        );
+        assert!(
+            violations
+                .iter()
+                .any(|violation| violation.krate == "widget"
+                    && violation.marker == "missing `categories`"),
+            "expected a missing-categories violation for `widget`: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn non_publishable_crate_is_skipped_entirely() {
+        let workspace = TempWorkspace::new("pacta-governance-non-publishable");
+        workspace.write_release_metadata_crate(
+            "internal-tool",
+            r#"
+publish = false
+"#,
+        );
+
+        assert_eq!(
+            check_release_metadata(&workspace.path),
+            Ok(()),
+            "a crate opting out with `publish = false` must carry none of this requirement, \
+             even with every other field missing"
+        );
+    }
+
+    #[test]
+    fn missing_crates_directory_fails_loudly() {
+        let workspace = TempWorkspace::new("pacta-governance-no-crates-dir");
+
+        let Err(violations) = check_release_metadata(&workspace.path) else {
+            panic!("a root with no crates/ directory must fail the gate");
+        };
+        assert_eq!(
+            violations,
+            vec![ReleaseMetadataViolation {
+                krate: String::from("crates/"),
+                line: 0,
+                marker: "no crates/ directory found",
             }]
         );
     }
@@ -1296,6 +1661,36 @@ edition = "2024"
             .expect("package manifest should be writable");
             fs::write(package.join("src/lib.rs"), source)
                 .expect("package source should be writable");
+        }
+
+        /// Writes a `crates/<name>/Cargo.toml` with the given `[package]` body (everything after
+        /// `name = "<name>"`), a shared workspace-root `README.md`, and a crate-local
+        /// `README.md` — mirroring the real repo layout `check_release_metadata` scans, so a
+        /// test only needs to supply the fields it cares about varying.
+        fn write_release_metadata_crate(&self, name: &str, package_fields: &str) {
+            let root_readme = self.path.join("README.md");
+            if !root_readme.exists() {
+                fs::write(&root_readme, "# Workspace\n").expect("root README should be writable");
+            }
+
+            let krate_dir = self.path.join("crates").join(name);
+            fs::create_dir_all(&krate_dir).expect("crate directory should be creatable");
+            fs::write(
+                krate_dir.join("Cargo.toml"),
+                format!(
+                    r#"[package]
+name = "{name}"
+{package_fields}
+"#
+                ),
+            )
+            .expect("crate manifest should be writable");
+
+            let crate_readme = krate_dir.join("README.md");
+            if !crate_readme.exists() {
+                fs::write(&crate_readme, format!("# {name}\n"))
+                    .expect("crate README should be writable");
+            }
         }
     }
 
