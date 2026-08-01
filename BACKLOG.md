@@ -34,8 +34,9 @@ roadmap and does not create implementation commitments. Shipped truth lives in
   governance coverage, active-prose governance, the kernel async-exposure
   reaction, the ambient-time scan on the core, the core no-synchronous-I/O scan
   (`std::io`/`fs`/`net`/`process`), the kernel no-serde forbidden-marker reaction
-  (proven to fire), the facade reactions (kernel-exclusion and re-exports-only), and the
-  executor orchestration-vocabulary reaction (proven to fire) are shipped.
+  (proven to fire), the facade reactions (kernel-exclusion and re-exports-only), the
+  executor orchestration-vocabulary reaction (proven to fire), the changelog
+  footer-link reaction, and the release-metadata reaction are shipped.
 - Middleware composition is reified: `Identity` (the empty stack), `Stack` (the closure
   property as a holdable value, proven by test), and `Composition` (a blind assembler with a
   single generic `then` and no named policy method). This ships the stack assembler previously
@@ -202,11 +203,12 @@ the core unless a future spec proves a Pacta-native boundary.
   the reference already creates pacts via construction-time `seeded`, not a trait method,
   and a consumer that breaches already holds the reason to persist itself). (4) also
   collides with the deliberate "no ingress API is part of the release" scope
-  (`release-packaging`); the retention/inspection halves of (2) and (3) are the already-
-  deferred Tribunal inspection / exhausted-pact review (see Operator Review). The governing
-  line: a registry-contract operation is warranted only when it must change the claim
-  authority's behavior; everything else stays backend/consumer. `Outcome` remains the
-  frozen `Fulfilled | Breached`.
+  (`release-packaging`); the retention/inspection halves of (2) and (3) are what Operator
+  Review / Tribunal now covers on the composition side (see Current Baseline) — recording
+  and inspecting stay consumer/`Policy`/`Middleware` concerns, never a registry-contract
+  operation. The governing line: a registry-contract operation is warranted only when it
+  must change the claim authority's behavior; everything else stays backend/consumer.
+  `Outcome` remains the frozen `Fulfilled | Breached`.
 - Infrastructure-failure handling during execution — resolved. An infrastructure
   failure now leaves the claim unsettled so it lapses and is reclaimed (at-least-once),
   rather than being terminally breached: the kernel fabricates no `Outcome` from an
@@ -284,23 +286,35 @@ the core unless a future spec proves a Pacta-native boundary.
   alias is later judged pure noise; not decided here.
 - Exhaustiveness was frozen by role, not uniformly. `Outcome` stays closed because a
   settlement is exactly `Fulfilled | Breached`; the growing enums are `#[non_exhaustive]`.
-  Opening `Outcome` later would be breaking and is not anticipated. Additive freeze work
-  left for post-1.0 (safe because additive): `#[must_use]` on result types, serde/derive
-  additions, and `cargo-semver-checks` against the published baseline. The 0.2.x line is a
+  Opening `Outcome` later would be breaking and is not anticipated. `#[must_use]` on
+  result types is shipped (see Current Baseline). Additive freeze work still left for
+  post-1.0 (safe because additive): serde/derive additions, and `cargo-semver-checks`
+  against the published baseline. The 0.2.x line is a
   **patch-compatible** series: through it the compose-level and backend-author faces stay
   additively stable (a patch adds no breaking change), so `0.2.1 → 0.2.2` is additive API
   plus fixes only — the stability statement is no longer only about 0.1.x. `lifecycle::State`
   is a closed four-variant enum for the 0.2 series (a stability statement, not a freeze
   against a later-minor evolution).
-- Packaging metadata has no governance teeth. The `release-packaging` requirements
-  (crate-specific `readme`, `keywords`/`categories`, MSRV, the version-carrying
-  dependency graph) are verified by prose review and tooling (`cargo publish --dry-run`,
-  CI), not by a `pacta-governance` reaction — the governance crate reads no `Cargo.toml`
-  metadata today. A file-presence/metadata check (e.g. every publishable crate resolves a
-  crate-local README, not the shared workspace root) could live there, consistent with the
-  existing active-prose checks, so the crate-specific-readme requirement cannot silently
-  regress. Deferred as asymmetric to add for one field alone; recorded for a future
+- Packaging metadata governance teeth — resolved (see Current Baseline). The
+  `release-packaging` Release Metadata requirement (crate-specific `readme`,
+  `description`, `license`, `repository`, `keywords`/`categories`) is now verified by a
+  `pacta-governance` reaction, not prose review alone — closing the gap this entry
+  originally recorded, deferred until it could cover the whole requirement symmetrically
+  rather than one field alone. MSRV and the version-carrying dependency graph remain
+  verified by CI's separate MSRV job and `cargo publish --dry-run` respectively, not by
+  `pacta-governance` — that scope was never part of this entry and stays a candidate for a
   governance pass. Not decided here.
+- Unused public API found during a release-prep sweep — recorded, not removed.
+  `Timestamp::as_millis` (`pacta-contract`), `MemoryRegistry::new` and
+  `MemoryRegistryAsync::new` (`pacta-memory`), and `Driver::executor` (`pacta-driver`,
+  exercised only by its own in-crate tests) have no in-workspace caller outside their own
+  definitions (or, for `Driver::executor`, outside its own crate's tests). Not removed now:
+  each is `pub`, so removing it is a breaking change for any external consumer, and this
+  sweep does not bump the version. Candidate for removal (or, for `Timestamp::as_millis`
+  and the `MemoryRegistry`/`MemoryRegistryAsync` constructors, confirmation they're worth
+  keeping as ergonomic API despite no in-workspace caller) in the next release that already
+  carries a breaking change. Not decided here.
+
 ## Explicitly Deferred
 
 - Workflow DAGs and inter-obligation dependency graphs.
