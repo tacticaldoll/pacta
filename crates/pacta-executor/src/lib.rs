@@ -518,6 +518,86 @@ mod tests {
         );
     }
 
+    // Reference demonstration of Operator Review / Tribunal, per
+    // `composition-governance`'s "Terminal Review Is Demonstrated": recording an exhausted
+    // pact for inspection is an `Executor`/`Middleware` concern composed over `Policy`, not a
+    // `Registry` capability. `#[cfg(test)]`-only scaffolding, per the same spec's "trait's
+    // in-workspace validator may be test-only" scenario -- never public API; a real Tribunal
+    // storage stays consumer- or sibling-owned.
+    struct TerminalReviewExecutor<Inner, P> {
+        inner: Inner,
+        policy: P,
+        attempts: HashMap<Uuid, u32>,
+        tribunal: std::rc::Rc<std::cell::RefCell<Vec<Uuid>>>,
+    }
+
+    impl<Inner, P> Executor for TerminalReviewExecutor<Inner, P>
+    where
+        Inner: Executor,
+        P: Policy<Inner::Error>,
+    {
+        type Error = Inner::Error;
+
+        fn execute(&mut self, execution: Execution) -> Result<Outcome, Self::Error> {
+            let id = execution.pact.id;
+            match self.inner.execute(execution) {
+                Ok(outcome) => {
+                    self.attempts.remove(&id);
+                    Ok(outcome)
+                }
+                Err(error) => {
+                    let attempts = self.attempts.entry(id).or_insert(0);
+                    *attempts += 1;
+                    match self.policy.decide(*attempts, &error) {
+                        Verdict::Continue => Err(error),
+                        Verdict::Concede => {
+                            // The recording step Operator Review composes: an exhausted pact
+                            // becomes inspectable *before* it settles, over the existing
+                            // Policy/Verdict seam -- no Registry capability involved.
+                            self.tribunal.borrow_mut().push(id);
+                            Ok(Outcome::Breached)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn exhausted_pact_is_recorded_for_operator_review() {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        let tribunal: Rc<RefCell<Vec<Uuid>>> = Rc::new(RefCell::new(Vec::new()));
+        let id = Uuid::from_u128(100);
+        let mut executor = TerminalReviewExecutor {
+            inner: FailingExecutor,
+            policy: FixedThreshold { threshold: 3 },
+            attempts: HashMap::new(),
+            tribunal: Rc::clone(&tribunal),
+        };
+
+        assert!(executor.execute(execution_with_id(id)).is_err());
+        assert!(
+            tribunal.borrow().is_empty(),
+            "not yet exhausted; nothing recorded"
+        );
+        assert!(executor.execute(execution_with_id(id)).is_err());
+        assert!(
+            tribunal.borrow().is_empty(),
+            "still not yet exhausted; nothing recorded"
+        );
+        assert_eq!(
+            executor.execute(execution_with_id(id)).unwrap(),
+            Outcome::Breached
+        );
+        assert_eq!(
+            *tribunal.borrow(),
+            vec![id],
+            "the exhausted pact should be recorded for operator review exactly once"
+        );
+    }
+
     #[test]
     fn a_success_resets_the_failure_count() {
         struct FlakyThenFulfilling {

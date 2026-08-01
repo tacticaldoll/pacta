@@ -51,6 +51,16 @@ roadmap and does not create implementation commitments. Shipped truth lives in
   `composition-governance`'s validator-may-be-test-only scenario. A concrete, publicly
   shippable orchestration `Middleware` that consumes `Policy` stays sibling- or
   consumer-owned and does not ship from this workspace.
+- Operator Review / Tribunal is demonstrated per `composition-governance`'s "Terminal
+  Review Is Demonstrated": recording an exhausted pact (`Verdict::Concede`) for operator
+  inspection composes over the existing `Policy`/`Middleware` seam, validated by an
+  in-workspace `#[cfg(test)]`-only reference `Executor` and test. Adds no `Registry`,
+  `pacta-contract`, or `pacta-memory` capability — the prior decline of a similar-looking
+  by-id status classification registry method (see Recorded Reconsiderations) stands on
+  its own merits and was never actually blocking this, since Operator Review was always
+  categorized as a `docs/blueprint.md` User-Defined-Obligation extension surface, not
+  Lifecycle Persistence. No concrete, production-usable `Tribunal` type or storage ships
+  from this workspace.
 
 ## Workspace Composition
 
@@ -177,15 +187,6 @@ Surface: integration boundary.
 
 Adapter examples are not core commitments. Compatibility work must stay outside
 the core unless a future spec proves a Pacta-native boundary.
-
-### Operator Review
-
-- Tribunal inspection patterns.
-- Manual review flows for exhausted pacts.
-- Minimal operational visibility.
-
-Surface: user-defined obligation or integration boundary, depending on the
-proposal.
 
 ## Recorded Reconsiderations
 

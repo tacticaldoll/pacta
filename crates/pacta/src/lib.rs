@@ -155,6 +155,17 @@
 //! let second = ledger.claim(&["default"], Timestamp::from_millis(1_000_000)).unwrap().unwrap();
 //! assert_ne!(first.retainer.id(), second.retainer.id());
 //! ```
+//!
+//! # Operator review (Tribunal)
+//!
+//! `Tribunal` names terminal review for a pact that has exhausted its retries and should
+//! no longer be handled automatically. There is no `Registry` capability for this — listing
+//! or inspecting pacts never changes claim-authority behavior, so it stays outside the
+//! contract, exactly like a durable backend's own storage. Instead, terminal review composes
+//! at the moment a [`Policy`] decides [`Verdict::Concede`]: your [`Executor`]/[`Middleware`]
+//! records the exhausted pact somewhere you can inspect, right before it settles as
+//! [`Outcome::Breached`]. Pacta ships no concrete `Tribunal` type or storage — that recording
+//! step, like the backoff policy behind durable retry, is yours to compose.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
