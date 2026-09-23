@@ -34,7 +34,7 @@ OpenSpec specs remain the durable requirements. Regenerate the projection only
 after a deliberate, separately authorized law change:
 
 ```sh
-BLESS=1 cargo test -p pacta-governance accepted_law_projection_is_fresh
+BLESS=1 cargo test -p pacta-governance law_projection_is_fresh
 ```
 
 Without `BLESS`, the same test fails if the projection is missing, unreadable, or

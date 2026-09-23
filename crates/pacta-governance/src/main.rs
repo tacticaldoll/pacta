@@ -236,7 +236,7 @@ fn constitution() -> Constitution {
                 .because(KERNEL_NO_SERDE_REASON),
         )
         .signature_boundary(
-            SemanticBoundary::in_crate("pacta")
+            SignatureBoundary::in_crate("pacta")
                 .module("crate")
                 .must_not_expose("pacta_contract::kernel")
                 .because(FACADE_KERNEL_REASON),
@@ -900,12 +900,11 @@ mod tests {
     use super::*;
 
     const LAW_PROJECTION_PREAMBLE: &str = "\
-# Pacta Tianheng Law
+# Pacta Tianheng Law Projection
 
-> Derived from the Rust `Constitution` in `crates/pacta-governance/src/main.rs`, which remains the
-> executable authority. OpenSpec specs remain the durable requirements. Do not edit this projection
-> by hand; regenerate it with
-> `BLESS=1 cargo test -p pacta-governance accepted_law_projection_is_fresh`.
+This file is generated from `constitution()` in `crates/pacta-governance/src/main.rs`.
+The Rust declaration is authoritative; do not edit the projection by hand.
+Regenerate it with `BLESS=1 cargo test -p pacta-governance law_projection_is_fresh`.
 
 ";
 
@@ -921,7 +920,7 @@ mod tests {
     }
 
     #[test]
-    fn accepted_law_projection_is_fresh() {
+    fn law_projection_is_fresh() {
         GovernanceTest::for_constitution(constitution())
             .with_manifest_dir(workspace_root())
             .assert_projection_fresh_with_preamble("AGENTS.pacta-law.md", LAW_PROJECTION_PREAMBLE);
@@ -1028,6 +1027,116 @@ pacta-driver = { path = "../pacta-driver" }
                 "expected the {prefix} no-I/O boundary to fire: {report:?}"
             );
         }
+    }
+
+    /// Runs the static boundaries over the full-workspace fixture with `contract_source` as
+    /// pacta-contract's `lib.rs`. Every other crate is identical across callers, so a firing
+    /// fixture differs from the clean one only in the leak its contract source plants.
+    fn core_contract_static_outcome(name: &str, contract_source: &str) -> Outcome {
+        let workspace = TempWorkspace::new(name);
+        workspace.write_package("tower", "");
+        // pacta-contract really depends on uuid. The uuid boundary is strict-external, and a
+        // fixture without the dependency leaves an un-`use`d `uuid::Uuid::now_v7()` unreported.
+        workspace.write_package("uuid", "");
+        workspace.write_package_with_source(
+            "pacta-contract",
+            "[dependencies]\nuuid = { path = \"../uuid\" }\n",
+            contract_source,
+        );
+        workspace.write_package(
+            "pacta-executor",
+            "[dependencies]\npacta-contract = { path = \"../pacta-contract\" }\n",
+        );
+        workspace.write_package(
+            "pacta-driver",
+            "[dependencies]\npacta-contract = { path = \"../pacta-contract\" }\npacta-executor = { path = \"../pacta-executor\" }\n",
+        );
+        workspace.write_package("pacta-governance", "");
+        workspace.write_package("pacta-memory", "");
+        workspace.write_package("pacta-conformance", "");
+        workspace.write_package(
+            "pacta",
+            "[dependencies]\npacta-contract = { path = \"../pacta-contract\" }\npacta-executor = { path = \"../pacta-executor\" }\npacta-driver = { path = \"../pacta-driver\" }\n",
+        );
+        workspace.write_root_manifest();
+
+        check(
+            constitution().static_boundaries(),
+            &workspace.path.join("Cargo.toml"),
+        )
+    }
+
+    /// Asserts that `outcome` carries a violation of the ambient-time boundary on `target` whose
+    /// finding is `finding`.
+    fn assert_ambient_time_fires(outcome: Outcome, target: &str, finding: &str) {
+        let Outcome::Violations(report) = outcome else {
+            panic!("expected the {target} ambient-time boundary to fire, got {outcome:?}");
+        };
+        assert!(
+            report.violations.iter().any(|violation| {
+                violation.target() == target
+                    && violation.rule == "inline symbol path confined to module"
+                    && violation.finding == finding
+            }),
+            "expected the {target} ambient-time boundary to fire on {finding}: {report:?}"
+        );
+    }
+
+    #[test]
+    fn ambient_clock_reaction_fires() {
+        let outcome = core_contract_static_outcome(
+            "pacta-governance-ambient-clock",
+            "pub fn leak() {\n    let _ = std::time::SystemTime::now();\n}\n",
+        );
+
+        assert_ambient_time_fires(outcome, "std::time", "std::time::SystemTime::now in crate");
+    }
+
+    #[test]
+    fn ambient_clock_reaction_fires_through_an_aliased_use() {
+        // The alias hides `std::time` at the call site; the boundary must resolve `Clock::now`
+        // through the `use` rather than match the written path.
+        let outcome = core_contract_static_outcome(
+            "pacta-governance-ambient-clock-alias",
+            "use std::time::SystemTime as Clock;\n\npub fn leak() {\n    let _ = Clock::now();\n}\n",
+        );
+
+        assert_ambient_time_fires(outcome, "std::time", "std::time::SystemTime::now in crate");
+    }
+
+    #[test]
+    fn ambient_uuid_reaction_fires() {
+        let outcome = core_contract_static_outcome(
+            "pacta-governance-ambient-uuid",
+            "pub fn leak() {\n    let _ = uuid::Uuid::now_v7();\n}\n",
+        );
+
+        assert_ambient_time_fires(outcome, "uuid", "uuid::Uuid::now_v7 in crate");
+    }
+
+    #[test]
+    fn ambient_uuid_reaction_fires_through_an_aliased_use() {
+        let outcome = core_contract_static_outcome(
+            "pacta-governance-ambient-uuid-alias",
+            "use uuid::Uuid as Id;\n\npub fn leak() {\n    let _ = Id::now_v1(&[0; 6]);\n}\n",
+        );
+
+        assert_ambient_time_fires(outcome, "uuid", "uuid::Uuid::now_v1 in crate");
+    }
+
+    #[test]
+    fn ambient_time_reactions_stay_clean_without_a_leak() {
+        // Precision: the same fixture with a contract that reads no clock must be clean, so the
+        // firing tests above prove a reacting boundary, not one that always fires.
+        let outcome = core_contract_static_outcome(
+            "pacta-governance-ambient-clean",
+            "pub fn stamp(now: std::time::SystemTime) -> std::time::SystemTime {\n    now\n}\n",
+        );
+
+        assert!(
+            matches!(outcome, Outcome::Clean(_)),
+            "a contract that takes time as a parameter must raise no violation: {outcome:?}"
+        );
     }
 
     #[test]
@@ -1584,10 +1693,9 @@ pub use pacta_contract::{Outcome, Settlement};
             "",
         );
 
-        assert_eq!(
-            outcome,
-            Outcome::Clean,
-            "a workspace with no kernel leak must raise no semantic violation"
+        assert!(
+            matches!(outcome, Outcome::Clean(_)),
+            "a workspace with no kernel leak must raise no semantic violation: {outcome:?}"
         );
     }
 
