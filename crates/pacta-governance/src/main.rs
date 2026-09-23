@@ -629,7 +629,7 @@ fn package_table_lines(content: &str) -> Vec<(usize, &str)> {
 }
 
 /// Whether the `[package]` table carries a literal `publish = false` — the same form
-/// `pacta-governance` itself uses to opt out of the workspace's default `publish = true`.
+/// `pacta-governance` itself uses to opt out of publishing.
 fn is_not_publishable(package_table: &[(usize, &str)]) -> bool {
     package_table
         .iter()

@@ -48,8 +48,8 @@
 //!
 //! - **An idempotent unit of work.** Recovery is **at-least-once**, not exactly-once: a lapsed,
 //!   reclaimed pact is executed again. The work a consumer performs between claim and settle
-//!   must be safe to repeat (compose idempotency with `shaahid`, or make the effect naturally
-//!   idempotent).
+//!   must be safe to repeat (compose an idempotency layer of your choice, or make the effect
+//!   naturally idempotent).
 //! - **User-owned lease sizing.** The lease duration ([`lease_millis`](AsyncRegistry::lease_millis))
 //!   is the consumer's to size for its workload; the contract supplies the mechanism, not a
 //!   constant.
