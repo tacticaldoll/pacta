@@ -31,9 +31,9 @@ Regenerate it with `BLESS=1 cargo test -p pacta-governance law_projection_is_fre
 
 ### `pacta-governance` (crate)
 
-> the governance gate must stay independent of the workspace graph it judges: its normal dependencies are limited to governance-family tooling (tianheng and its guibiao coverage core), never a workspace crate under judgment.
+> the governance gate must stay independent of the workspace graph it judges: its normal dependencies are limited to tianheng, the governance-family tooling, never a workspace crate under judgment.
 
-- **rule**: restrict dependencies to (only: tianheng, guibiao)
+- **rule**: restrict dependencies to (only: tianheng)
 - **kind**: crate · **severity**: enforce
 
 ### `pacta-memory` (crate)

@@ -13,7 +13,7 @@ use tianheng::prelude::*;
 const CONTRACT_REASON: &str = "pacta-contract is the isolated core contract. Its normal dependencies are limited to serde and uuid, never another workspace crate or runtime framework.";
 const EXECUTOR_REASON: &str = "pacta-executor owns the Pacta-native execution vocabulary. Its normal dependencies are limited to pacta-contract, never drivers, adapters, backends, or external frameworks.";
 const DRIVER_REASON: &str = "pacta-driver is mechanical runtime glue. Its normal dependencies are limited to pacta-contract and pacta-executor, never adapters, backends, or external frameworks.";
-const GOVERNANCE_REASON: &str = "the governance gate must stay independent of the workspace graph it judges: its normal dependencies are limited to governance-family tooling (tianheng and its guibiao coverage core), never a workspace crate under judgment.";
+const GOVERNANCE_REASON: &str = "the governance gate must stay independent of the workspace graph it judges: its normal dependencies are limited to tianheng, the governance-family tooling, never a workspace crate under judgment.";
 const KERNEL_ASYNC_REASON: &str = "the sans-I/O step-driver kernel (crate::kernel) must stay runtime-agnostic: no public fn, inherent method, or trait method declaration anywhere in its subtree is an async fn, so the async sugar cannot color its surface. A written -> impl Future is the impl-Trait tooth's domain, and a macro-generated item is invisible to a source scan.";
 const LIFECYCLE_ASYNC_REASON: &str = "the colorless lifecycle-state kernel (crate::lifecycle) is the single source both the sync and async Registry bindings compose over; no public fn, inherent method, or trait method declaration anywhere in its subtree is an async fn, so the async sugar cannot color the shared semantics. A written -> impl Future is the impl-Trait tooth's domain, and a macro-generated item is invisible to a source scan.";
 const KERNEL_IMPL_TRAIT_REASON: &str = "the sans-I/O step-driver kernel (crate::kernel) returns named types, not existentials: no public fn or method in the module itself returns a written impl Trait. The async-exposure tooth catches only a literal async fn, but a fn -> impl Future desugars to the same runtime coloring, so this closes that hole for the written form. A boxed dyn Future return, a descendant module, and a macro-generated item are outside this tooth.";
@@ -143,7 +143,7 @@ fn constitution() -> Constitution {
         )
         .boundary(
             CrateBoundary::crate_("pacta-governance")
-                .restrict_dependencies_to(["tianheng", "guibiao"])
+                .restrict_dependencies_to(["tianheng"])
                 .because(GOVERNANCE_REASON),
         )
         .boundary(
@@ -977,6 +977,87 @@ pacta-driver = { path = "../pacta-driver" }
                 && violation.rule == "restrict dependencies to"
                 && violation.finding == "tower"
         }));
+    }
+
+    #[test]
+    fn governance_dependency_rejects_guibiao_and_keeps_tianheng() {
+        // The governance boundary must bite on a direct guibiao dependency (reached only through
+        // tianheng's composed surface) while the tianheng-only dependency stays allowed.
+        fn write_workspace(workspace: &TempWorkspace, governance_dependencies: &str) {
+            workspace.write_package("tianheng", "");
+            workspace.write_package("guibiao", "");
+            workspace.write_package("pacta-contract", "");
+            workspace.write_package("pacta-executor", "");
+            workspace.write_package("pacta-driver", "");
+            workspace.write_package("pacta-governance", governance_dependencies);
+            workspace.write_package("pacta-memory", "");
+            workspace.write_package("pacta-conformance", "");
+            workspace.write_package("pacta", "");
+            workspace.write_root_manifest_members(&[
+                "guibiao",
+                "pacta",
+                "pacta-conformance",
+                "pacta-contract",
+                "pacta-driver",
+                "pacta-executor",
+                "pacta-governance",
+                "pacta-memory",
+                "tianheng",
+            ]);
+        }
+
+        let violating = TempWorkspace::new("pacta-governance-direct-guibiao");
+        write_workspace(
+            &violating,
+            r#"
+[dependencies]
+tianheng = { path = "../tianheng" }
+guibiao = { path = "../guibiao" }
+"#,
+        );
+        let outcome = check(
+            constitution().static_boundaries(),
+            &violating.path.join("Cargo.toml"),
+        );
+        let Outcome::Violations(report) = outcome else {
+            panic!("expected the direct guibiao dependency to violate, got {outcome:?}");
+        };
+        assert!(
+            report.violations.iter().any(|violation| {
+                violation.target() == "pacta-governance"
+                    && violation.rule_key().rule_type()
+                        == "tianheng.rule/guibiao/restrict-dependencies-to"
+                    && violation
+                        .fact()
+                        .fields()
+                        .any(|(name, value)| name == "package" && value == "guibiao")
+                    && violation.severity == Severity::Enforce
+            }),
+            "expected an enforced structured guibiao dependency finding: {report:?}"
+        );
+        assert!(
+            !report.violations.iter().any(|violation| {
+                violation.target() == "pacta-governance" && violation.finding == "tianheng"
+            }),
+            "tianheng must stay allowed alongside the guibiao finding: {report:?}"
+        );
+
+        let allowed = TempWorkspace::new("pacta-governance-tianheng-only");
+        write_workspace(
+            &allowed,
+            r#"
+[dependencies]
+tianheng = { path = "../tianheng" }
+"#,
+        );
+        let outcome = check(
+            constitution().static_boundaries(),
+            &allowed.path.join("Cargo.toml"),
+        );
+        assert!(
+            matches!(outcome, Outcome::Clean(_)),
+            "the tianheng-only governance dependency must remain allowed: {outcome:?}"
+        );
     }
 
     #[test]
