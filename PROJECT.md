@@ -51,8 +51,9 @@ The behavior that must be protected at all costs:
   edge, not a correctness gate.
 - **Adapter boundary**: framework, transport, and storage integrations remain
   outside the core and cannot define first-layer Pacta APIs.
-- **Governance with teeth**: Tianheng and project specs enforce the boundaries
-  that prose claims.
+- **Governance with teeth**: Tianheng reacts to the structural shapes its accepted
+  boundaries observe, and the conformance suite exercises behavioral claims from the
+  project specs; what neither observes stays review-governed.
 
 ## Elegance
 

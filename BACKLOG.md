@@ -81,8 +81,8 @@ convenience.
 
 The publishable crates are `pacta`, `pacta-contract`,
 `pacta-executor`, `pacta-driver`, `pacta-memory`, and `pacta-conformance`;
-`pacta-governance` stays unpublished (an internal gate that depends on `tianheng`
-and its `guibiao` coverage core).
+`pacta-governance` stays unpublished (an internal gate whose only normal dependency
+is `tianheng`, which composes its `guibiao` coverage core).
 The `pacta` facade is the curated published entrypoint; it was added only once the
 workspace became publishable, because its "publisher owns the entrypoint"
 justification holds only when the workspace actually publishes.
