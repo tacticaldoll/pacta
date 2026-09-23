@@ -69,10 +69,10 @@ where
 }
 
 /// The number of rounds the contention checks repeat to surface a racing interleaving. This is a
-/// **probabilistic stress**, not a deterministic proof: an atomic backend passes every round, and a
-/// non-atomic one is overwhelmingly likely — but not guaranteed on any single round — to be caught
-/// here. The harness's *teeth* are proven deterministically by the barrier-synchronized broken
-/// fixture in this crate's tests, not by this repetition count.
+/// **probabilistic stress**, not a deterministic proof: an atomic backend passes every round, while
+/// the repetition does not guarantee catching any given non-atomic backend. The harness's *teeth*
+/// are proven deterministically by the barrier-synchronized broken fixture in this crate's tests,
+/// not by this repetition count.
 pub const CONTENTION_ROUNDS: usize = 2000;
 
 /// Verify a sync [`Registry`] backend upholds at-most-once authority under real concurrency: two
