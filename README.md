@@ -42,7 +42,7 @@ center. Pacta takes the opposite path:
 - `Executor` handles claimed pacts.
 - `Middleware` describes Pacta-native execution composition.
 - Adapters and backends remain outside the core contract.
-- Tianheng governance rejects architecture drift.
+- Tianheng governance rejects the architecture drift its boundaries observe.
 
 The result is deliberately thin: enough structure to bite, not enough bulk to
 own the user's domain.
