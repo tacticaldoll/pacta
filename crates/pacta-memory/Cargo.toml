@@ -9,7 +9,7 @@ readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 description = "In-memory Pacta Registry backend with real lease and lapse semantics."
-publish.workspace = true
+publish = true
 
 [features]
 # The reference async backend (MemoryRegistryAsync), over the shared store. Zero extra deps beyond

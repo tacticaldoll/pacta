@@ -7,7 +7,9 @@ ignore = []
 
 [licenses]
 version = 2
-allow = ["MIT", "Apache-2.0", "Unlicense", "Unicode-3.0"]
+# Family base: MIT, Apache-2.0, Unicode-3.0. Append a license only for a resolved dependency that
+# needs it.
+allow = ["MIT", "Apache-2.0", "Unicode-3.0"]
 confidence-threshold = 0.9
 
 [bans]
@@ -16,3 +18,4 @@ multiple-versions = "warn"
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
+allow-git = []

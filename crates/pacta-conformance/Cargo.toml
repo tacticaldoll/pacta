@@ -9,7 +9,7 @@ readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 description = "Backend-agnostic conformance suite for Pacta Registry implementations."
-publish.workspace = true
+publish = true
 
 [dependencies]
 pacta-contract.workspace = true

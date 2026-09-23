@@ -18,7 +18,6 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/tacticaldoll/pacta"
 keywords = ["durable", "lifecycle", "sans-io", "state-machine", "contract"]
 categories = ["asynchronous", "concurrency"]
-publish = true
 
 [workspace.dependencies]
 pacta-conformance = { path = "crates/pacta-conformance", version = "0.3.1" }
