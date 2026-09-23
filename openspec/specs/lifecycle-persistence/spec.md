@@ -52,7 +52,8 @@ deterministic and testable and the core commits to no time source.
 - **WHEN** the core lifecycle contract is implemented
 - **THEN** it takes the current time as an input at its seam rather than calling a
   wall-clock function, and the change that introduces time-taking code adds a
-  governance check enforcing this
+  governance check that rejects the inline clock calls it can observe, leaving a
+  clock read outside them to review
 
 ### Requirement: At-Least-Once Recovery And Idempotent Obligation
 Pacta SHALL guarantee at-least-once claim recovery: a pact whose holder stops

@@ -17,14 +17,15 @@ Pacta SHALL run its Definition of Done in GitHub Actions for push and pull reque
 - **THEN** rustdoc warnings fail the job
 
 ### Requirement: Tianheng Governance Reaction
-Pacta SHALL run its Tianheng architecture constitution as a CI reaction.
+Pacta SHALL run its Tianheng architecture constitution as a CI reaction. The dependency boundaries
+observe each crate's normal dependency table; a dev or build dependency is review-governed.
 
 #### Scenario: Architecture check runs
 - **WHEN** a push or pull request runs CI
 - **THEN** CI runs `pacta-governance` against the workspace manifest
 
 #### Scenario: Contract crate remains isolated
-- **WHEN** `pacta-contract` gains a forbidden dependency
+- **WHEN** `pacta-contract` gains a normal dependency outside its declared allowlist
 - **THEN** the governance reaction fails
 
 #### Scenario: Core framework leakage is rejected
@@ -38,18 +39,21 @@ kernel** (`crate::lifecycle`), each throughout its own submodules — so their r
 cannot silently drift, not at one seam only. The lifecycle kernel is the single source that both
 the synchronous and asynchronous `Registry` bindings compose over; an exposed `async fn` there
 would colour that shared source and let the two bindings drift, so it is guarded by its own
-boundary, distinct from the step-driver kernel's.
+boundary, distinct from the step-driver kernel's. The reaction observes a public `fn`, inherent
+method, or trait method declaration written as an `async fn` in each kernel's subtree; a written
+`-> impl Future` is the impl-trait reaction's domain, and a macro-generated item or a module nested
+inside a function body is review-governed.
 
 #### Scenario: Step-driver kernel async fn is rejected
-- **WHEN** the step-driver kernel's (`crate::kernel`) public API exposes an `async fn`
+- **WHEN** the step-driver kernel's (`crate::kernel`) public API declares an `async fn`
 - **THEN** the governance reaction fails via the hunyi semantic dimension
 
 #### Scenario: Lifecycle kernel async fn is rejected
-- **WHEN** the colorless lifecycle-state kernel's (`crate::lifecycle`) public API exposes an `async fn`
+- **WHEN** the colorless lifecycle-state kernel's (`crate::lifecycle`) public API declares an `async fn`
 - **THEN** the governance reaction fails, because the lifecycle kernel must stay colorless so the sync and async bindings cannot drift
 
 #### Scenario: A submodule async fn is rejected
-- **WHEN** a submodule under either kernel exposes an `async fn`
+- **WHEN** a submodule under either kernel declares a public `async fn`
 - **THEN** the governance reaction fails, because each async-exposure boundary descends its kernel subtree
 
 #### Scenario: Async-exposure reaction runs in CI
@@ -122,19 +126,24 @@ Pacta SHALL keep new runtime crates covered by executable quality and architectu
 
 ### Requirement: Core Reads No Ambient Time
 The `pacta-contract` core SHALL NOT read an ambient wall clock. An executable
-governance reaction SHALL reject ambient current-time reads in the core —
-including reads reached through a renamed or re-exported import, and a
-fully-qualified external time constructor written without an import — so the
-injected-time discipline is enforced rather than merely documented.
+governance reaction SHALL reject an inline `std::time` `now` call and an inline
+`uuid` `now_v7` or `now_v1` call in the core — including one reached through a
+renamed `use` import, and a fully-qualified `uuid` constructor written without an
+import — so the observable part of the injected-time discipline is enforced rather
+than merely documented. A clock read through a method on a value (such as
+`Instant::elapsed`), a `now` path taken as a value rather than called, a
+time-reading `uuid` path outside that pair, a path reached through another crate's
+re-export, and an `extern crate … as` rename are not observed and stay
+review-governed.
 
 #### Scenario: An ambient clock read in the core fails governance
-- **WHEN** `pacta-contract` source acquires the current time from an ambient clock
-  such as a `std::time` `now()` call or a `uuid` time-based constructor
+- **WHEN** `pacta-contract` source makes an inline `std::time` `now` call (such as
+  `SystemTime::now()`) or an inline `uuid` `now_v7` or `now_v1` call
 - **THEN** the governance reaction fails
 
 #### Scenario: An aliased ambient clock read is still caught
-- **WHEN** the core reaches an ambient clock read through a renamed or re-exported
-  import, such as `use std::time::SystemTime as Clock; Clock::now()`
+- **WHEN** the core reaches such a call through a renamed `use` import, such as
+  `use std::time::SystemTime as Clock; Clock::now()`
 - **THEN** the governance reaction still fails, because the reaction resolves the
   call's symbol path rather than matching source text
 
@@ -215,10 +224,13 @@ protocol does not" cannot silently drift. A Tianheng forbidden-marker reaction S
 reject the `pacta-contract` `crate::kernel` subtree acquiring `Serialize` or
 `Deserialize` — whether by `#[derive]` or a hand-written `impl` — because a
 `Directive` or `Notice` is a decision to be performed now, not durable state. The
+reaction observes a derive or hand-written impl in kernel source whose self type it
+resolves; a macro-generated impl, and a hand-written impl whose self type it cannot
+resolve (for example one reached through a glob import), are review-governed. The
 reaction SHALL be proven to fire.
 
 #### Scenario: A kernel serde derive fails governance
-- **WHEN** a type in the `pacta-contract` `crate::kernel` subtree acquires `Serialize` or `Deserialize`
+- **WHEN** a type in the `pacta-contract` `crate::kernel` subtree acquires `Serialize` or `Deserialize` by a written derive or a hand-written impl whose self type resolves to it
 - **THEN** the governance reaction fails via the hunyi forbidden-marker dimension
 
 #### Scenario: The no-serde reaction is proven to fire
@@ -231,24 +243,25 @@ reaction SHALL be proven to fire.
 
 ### Requirement: The Core Contract Performs No Synchronous I/O
 Pacta SHALL extend the sans-I/O guarantee beyond its async-only coverage with an
-executable reaction that rejects synchronous standard-library I/O anywhere in the
-core contract crate, so the core's I/O-free nature — the kernel included — is
-enforced and not only documented. A Tianheng `must_not_call_inline` reaction SHALL
-reject calls into `std::io`, `std::fs`, `std::net`, and `std::process` from the
-`pacta-contract` crate. It targets the whole crate (`module("crate")`), as the
-sibling ambient-time tooth does, because the guibiao module rule governs a
-file-based module and the entire core is sans-I/O, not the inline `kernel` module
-alone. These are sysroot heads caught in the default mode, so the reaction does not
-use `strict_external()` (which exists only to also catch external-crate heads). The
-reaction is acknowledged to be inherently partial — I/O entry points cannot be
-enumerated, and macro-expanded I/O such as `println!` is not seen by a source scan —
-and SHALL state that partiality in its reason, complementing rather than replacing
-review. The reaction SHALL be proven to fire by a reaction test, so a misconfigured
-or silently no-op boundary — a mistyped prefix, a wrong module target — cannot pass
-forever behind a clean workspace.
+executable reaction that rejects inline calls into synchronous standard-library I/O
+paths anywhere in the core contract crate, so the observable part of the core's
+I/O-free nature — the kernel included — is enforced and not only documented. A
+Tianheng `must_not_call_inline` reaction SHALL reject inline calls into `std::io`,
+`std::fs`, `std::net`, and `std::process` from the `pacta-contract` crate. It targets
+the whole crate (`module("crate")`), as the sibling ambient-time tooth does, because
+the guibiao module rule governs a file-based module and the entire core is sans-I/O,
+not the inline `kernel` module alone. These are sysroot heads caught in the default
+mode, so the reaction does not use `strict_external()` (which exists only to also
+catch external-crate heads). The reaction is acknowledged to be inherently partial —
+I/O entry points cannot be enumerated, and a call through a method on a value (such as
+`write_all` on a writer) or macro-expanded I/O such as `println!` is not seen by a
+source scan — and SHALL state that partiality in its reason, complementing rather than
+replacing review. The reaction SHALL be proven to fire by a reaction test, so a
+misconfigured or silently no-op boundary — a mistyped prefix, a wrong module target —
+cannot pass forever behind a clean workspace.
 
 #### Scenario: A synchronous I/O call in the core fails governance
-- **WHEN** any code in the `pacta-contract` core crate, the kernel included, calls into `std::io`, `std::fs`, `std::net`, or `std::process`
+- **WHEN** any code in the `pacta-contract` core crate, the kernel included, makes an inline call into a `std::io`, `std::fs`, `std::net`, or `std::process` path
 - **THEN** the governance reaction fails, because the sans-I/O core performs no I/O
 
 #### Scenario: Runtime I/O outside the core is allowed
@@ -267,13 +280,16 @@ item of `pacta-executor` whose name denotes retry, timeout, backoff, circuit, qu
 rate-limit. The forbidden list SHALL be generic orchestration vocabulary drawn from the stated
 non-goals and SHALL name no sibling product, because sibling-blindness forbids the reaction from
 naming what it checks against. The reaction is acknowledged to be inherently partial — a line
-scan sees no macro-expanded item and skips `pub use` re-exports and `pub const` values — and so
-complements review rather than replacing it. The reaction SHALL be proven to fire, so a
+scan judges only a line that begins with `pub ` and defines a `fn`, `struct`, `enum`, `trait`,
+`type`, `static`, `union`, `mod`, or `macro`, so it sees no macro-expanded item and skips `pub use`
+re-exports, `pub const` values, trait method declarations, and `pub` fields — and so complements
+review rather than replacing it. The reaction SHALL be proven to fire, so a
 misconfigured or silently no-op boundary cannot pass forever.
 
 #### Scenario: A public orchestration-named symbol in the executor fails governance
-- **WHEN** `pacta-executor` exposes a public item whose name denotes retry, timeout, backoff,
-  circuit, quota, or rate-limit
+- **WHEN** `pacta-executor` source declares a public item definition (`fn`, `struct`, `enum`,
+  `trait`, `type`, `static`, `union`, `mod`, or `macro`) whose name denotes retry, timeout,
+  backoff, circuit, quota, or rate-limit
 - **THEN** the governance reaction fails
 
 #### Scenario: The reaction names no sibling
@@ -315,16 +331,18 @@ no-vacuous-pass parity the coverage check already enforces.
 - **THEN** it reports no vacuous-input failure
 
 ### Requirement: Colorless Kernel Exposes No Return-Position Existentials
-Pacta SHALL reject a return-position `impl Trait` (RPIT) in the public API of the sans-I/O kernels —
+Pacta SHALL reject a written return-position `impl Trait` (RPIT) returned by a public fn or method
+in the module itself of each sans-I/O kernel —
 the step-driver kernel (`crate::kernel`) and the colorless lifecycle-state kernel
 (`crate::lifecycle`) — because the async-exposure guard catches only a literal `async fn`, while a
 `fn -> impl Future` desugars to the same runtime coloring and would otherwise escape. The kernels
-return named types, not existentials, so a Tianheng `impl_trait_boundary` SHALL forbid any RPIT there,
-closing the runtime-coloring hole that would let the sync and async bindings drift. The reaction SHALL
-be proven to fire.
+return named types, not existentials, so a Tianheng `impl_trait_boundary` SHALL forbid a written RPIT
+there, closing that runtime-coloring hole for the written form. A descendant module, a boxed
+`dyn Future` return, and a macro-generated item are outside the reaction and stay review-governed.
+The reaction SHALL be proven to fire.
 
 #### Scenario: A returned impl Trait in a kernel is rejected
-- **WHEN** the public API of `crate::kernel` or `crate::lifecycle` returns a written `impl Trait` (for example `fn drive() -> impl core::future::Future`)
+- **WHEN** a public fn or method in the `crate::kernel` or `crate::lifecycle` module itself returns a written `impl Trait` (for example `fn drive() -> impl core::future::Future`)
 - **THEN** the governance reaction fails via the hunyi impl-trait dimension, because the colorless kernel must return named types rather than an existential that could carry runtime coloring
 
 #### Scenario: The impl-trait reaction is proven to fire
