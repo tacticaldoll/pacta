@@ -189,14 +189,17 @@ and (for the async binding) the suite's own poll-based `block_on`, pulling no as
 - **THEN** it decides the outcome through the public claim operation only, not by inspecting the backend's locking, transaction, or compare-and-set mechanism
 
 ### Requirement: The Contention Harness Is Proven Non-Vacuous
-The suite SHALL prove that its contention checks actually catch a non-atomic backend, so a
-contention gate cannot pass forever against a broken backend and read as coverage it does not
-provide. A deterministic, barrier-synchronized non-atomic fixture — whose contended operation loads
-the state, waits until both contending workers have loaded the same pre-state, then stores, so a
-double application is forced rather than left to chance — SHALL make the corresponding contention
-check fail. A matching atomic fixture SHALL pass. Both the settlement-contention and the
-claim-contention branches SHALL be covered by such a guard. This mirrors the project's "reactions are
-proven to fire" discipline for governance.
+The suite SHALL prove that its contention checks can catch a non-atomic backend, so a contention
+gate cannot be vacuous and read as coverage it does not provide. Against an arbitrary backend the
+contention checks repeat the contended settlement and the contended claim for a fixed number of
+rounds on real concurrent workers; that repetition is a probabilistic stress and does not
+guarantee that any given non-atomic backend is caught on any run. The harness's teeth are proven
+only by the deterministic fixtures below. A deterministic, barrier-synchronized
+non-atomic fixture — whose contended operation loads the state, waits until both contending workers
+have loaded the same pre-state, then stores, so a double application is forced rather than left to
+chance — SHALL make the corresponding contention check fail. A matching atomic fixture SHALL pass.
+Both the settlement-contention and the claim-contention branches SHALL be covered by such a guard.
+This mirrors the project's "reactions are proven to fire" discipline for governance.
 
 #### Scenario: A non-atomic apply fails the settlement-contention check
 - **WHEN** the settlement-contention check runs against a deterministically non-atomic `apply` fixture that lets both workers observe the same pre-state before either stores
