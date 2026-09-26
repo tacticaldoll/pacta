@@ -285,6 +285,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 cargo deny check
 cargo run -p pacta-governance -- check --manifest-path Cargo.toml
 ./scripts/changelog-guard.sh
+npx -y @fission-ai/openspec@1.13.2 validate --all --strict --no-interactive
 cargo +1.88 build --workspace --all-features
 ```
 
@@ -304,5 +305,5 @@ toolchain.
 
 CI (`.github/workflows/ci.yml`) runs the same gates on push and pull request. Rust style lives in
 these checks: rustfmt formats, clippy denies warnings, rustdoc denies documentation warnings,
-cargo-deny owns resolved supply-chain policy, and `pacta-governance` owns Tianheng architecture
-boundaries.
+cargo-deny owns resolved supply-chain policy, `pacta-governance` owns Tianheng architecture
+boundaries, and the pinned OpenSpec CLI validates the specs and any active change.
